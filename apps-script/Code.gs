@@ -406,7 +406,33 @@ function tg_(text) {
   const r = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
     method: 'post', muteHttpExceptions: true, payload: { chat_id: chat, text: text.slice(0, 4000), disable_web_page_preview: 'true' },
   });
+  if (r.getResponseCode() !== 200) console.warn('텔레그램 보내기 실패: ' + r.getContentText());
   return r.getResponseCode() === 200;
+}
+
+/** 텔레그램만 따로 시험 (나라장터 API 없이). 실패하면 이유를 쉬운 말로 로그에 남긴다 */
+function testTelegram() {
+  const token = (P.getProperty('TG_TOKEN') || '').trim();
+  if (!token) throw new Error('스크립트 속성에 TG_TOKEN(봇 토큰)이 없어요');
+  const me = JSON.parse(UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/getMe', { muteHttpExceptions: true }).getContentText());
+  if (!me.ok) throw new Error('봇 토큰이 맞지 않아요. BotFather가 준 토큰 전체(숫자:영문)를 앞뒤 빈칸 없이 넣어 주세요');
+  console.log('봇 확인: @' + me.result.username);
+  let chat = (P.getProperty('TG_CHAT_ID') || '').trim();
+  if (!chat) {
+    const u = JSON.parse(UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/getUpdates', { muteHttpExceptions: true }).getContentText());
+    const m = (u.result || []).map(x => x.message || x.channel_post).filter(Boolean).pop();
+    if (!m) throw new Error('@' + me.result.username + ' 대화방에서 시작(/start)을 누르거나 아무 말이나 보낸 뒤 다시 실행해 주세요');
+    chat = String(m.chat.id); P.setProperty('TG_CHAT_ID', chat);
+    console.log('대화방 번호를 찾아 저장했어요: ' + chat);
+  }
+  const r = JSON.parse(UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+    method: 'post', muteHttpExceptions: true, payload: { chat_id: chat, text: '[개찰알림] 텔레그램 연결 시험이에요. 이 메시지가 보이면 성공!' },
+  }).getContentText());
+  if (r.ok) { console.log('보냈어요. @' + me.result.username + ' 대화방을 확인하세요'); return; }
+  const d = String(r.description || '');
+  if (/chat not found/i.test(d)) throw new Error('대화방(' + chat + ')을 못 찾았어요. @' + me.result.username + ' 대화방에서 시작(/start)을 누른 뒤, TG_CHAT_ID를 지우고 다시 실행해 주세요');
+  if (/blocked/i.test(d)) throw new Error('봇이 차단돼 있어요. 텔레그램에서 @' + me.result.username + ' 차단을 풀어 주세요');
+  throw new Error('텔레그램 오류: ' + d);
 }
 
 /** 같은 오류는 하루 한 번만 메일로 */
