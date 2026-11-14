@@ -452,7 +452,8 @@ function fetchAll_(url, params, rows, pages) {
 }
 
 function call_(url, params) {
-  const key = P.getProperty('G2B_KEY');
+  // 다른 앱(올포오션 등)과 같은 인증키를 쓰므로 속성 이름은 둘 다 받는다
+  const key = P.getProperty('G2B_KEY') || P.getProperty('DATA_GO_KR_KEY');
   if (!key) throw new Error('스크립트 속성 G2B_KEY(공공데이터포털 인증키)가 없어요');
   const q = Object.keys(params).filter(k => params[k] !== '' && params[k] != null).map(k => k + '=' + encodeURIComponent(params[k])).join('&');
   const full = url + '?serviceKey=' + (key.indexOf('%') >= 0 ? key : encodeURIComponent(key)) + '&type=json&' + q;
@@ -500,7 +501,7 @@ function esc_(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ 
 
 /** ① 처음 한 번: 연결 암호·데이터 시트·자동 확인을 만들고, 휴대폰에서 누를 연결 링크를 보여 줌 */
 function setup() {
-  if (!P.getProperty('G2B_KEY')) throw new Error('먼저 프로젝트 설정 → 스크립트 속성에 G2B_KEY(공공데이터포털 인증키)를 넣어 주세요');
+  if (!P.getProperty('G2B_KEY') && !P.getProperty('DATA_GO_KR_KEY')) throw new Error('먼저 프로젝트 설정 → 스크립트 속성에 G2B_KEY(공공데이터포털 인증키)를 넣어 주세요');
   if (!P.getProperty('APP_TOKEN')) P.setProperty('APP_TOKEN', Utilities.getUuid().replace(/-/g, '').slice(0, 20));
   book_();
   installTrigger_(settings_().interval);
