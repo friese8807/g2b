@@ -150,6 +150,7 @@ button{touch-action:manipulation}
 .ak-tabs button{position:relative}
 .badge{position:absolute;top:-4px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:#e5484d;color:#fff;font-size:10.5px;font-weight:800;line-height:17px;font-style:normal}
 #sc{padding-top:12px}
+body.kb #sc{padding-bottom:50vh}
 .sec{display:flex;align-items:center;gap:8px;margin:18px 2px 8px;font-size:14px;font-weight:800}
 .sec:first-child{margin-top:2px}
 .sec::before{content:"";width:4px;height:15px;border-radius:2px;background:var(--accent)}
@@ -525,7 +526,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794671117';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794672723';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -742,8 +743,13 @@ function renderSet() {
   const s = S.d?.settings || {}, x = S.d?.status || {};
   const hours = (sel) => Array.from({ length: 25 }, (_, h) => `<option value="${h}" ${sel === h ? 'selected' : ''}>${h}시</option>`).join('');
   const calls = Math.round(((s.endHour || 20) - (s.startHour || 8)) * 60 / (s.interval || 1));
+  // 서버를 아직 연결하지 않았으면 연결 칸을 맨 위에 둔다 (맨 아래에 있으면 키보드에 가려 누르기 어려웠다)
+  const conn = `<div class="card" id="connCard"><h2>${S.demo ? '먼저 서버를 연결해 주세요' : '서버 연결'}</h2><p class="sub">Apps Script <b>setup</b> 실행 기록에 나온 서버 주소와 연결 암호를 넣어요.</p>
+      <input class="fld" id="cUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(S.conn?.url || '')}">
+      <input class="fld" id="cTok" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="연결 암호" value="${esc(S.conn?.token || '')}">
+      <button class="btn wide ${S.demo ? '' : 'ghost'}" data-act="conn" type="button">${S.conn?.url ? '다시 연결' : '연결하기'}</button></div>`;
   const sw = (k, on) => `<label class="sw"><input type="checkbox" data-set="${k}" ${on ? 'checked' : ''}><i></i></label>`;
-  return `<div class="card"><h2>확인 간격</h2><p class="sub">나라장터를 얼마나 자주 확인할지 정해요. 짧을수록 빨리 알지만 공공데이터 호출이 늘어요.</p>
+  return (S.demo ? conn : '') + `<div class="card"><h2>확인 간격</h2><p class="sub">나라장터를 얼마나 자주 확인할지 정해요. 짧을수록 빨리 알지만 공공데이터 호출이 늘어요.</p>
       <div class="seg">${INTERVALS.map(([v, l]) => `<button type="button" class="${s.interval === v ? 'on' : ''}" data-iv="${v}">${l}</button>`).join('')}</div>
       <div class="line" style="margin-top:8px"><div class="lb">확인하는 시간<small>개찰은 주로 평일 낮에 해요</small></div>
         <select data-set="startHour">${hours(s.startHour)}</select><span>~</span><select data-set="endHour">${hours(s.endHour)}</select></div>
@@ -764,10 +770,7 @@ function renderSet() {
       <div class="line"><div class="lb">마지막 확인</div><span>${esc(x.lastRun || '-')}</span></div>
       <div class="line"><div class="lb">오늘 호출</div><span class="num">${(x.callsToday || 0).toLocaleString('ko-KR')}회</span></div>
       ${x.lastError ? `<div class="line"><div class="lb bad">최근 오류<small>${esc(x.lastError)}</small></div></div>` : ''}</div>
-    <div class="card"><h2>서버 연결</h2><p class="sub">Apps Script 배포 주소와 연결 암호예요. 서버의 <b>setup</b> 실행 기록에 나온 링크를 한 번 누르면 자동으로 들어가요.</p>
-      <input class="fld" id="cUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(S.conn?.url || '')}">
-      <input class="fld" id="cTok" type="text" placeholder="연결 암호" value="${esc(S.conn?.token || '')}">
-      <button class="btn wide ghost" data-act="conn" type="button">${S.conn?.url ? '다시 연결' : '연결하기'}</button></div>
+    ${S.demo ? '' : conn}
     <p class="diag">${AppKit.env(BUILD)}</p>`;
 }
 function collectSettings() {
@@ -863,6 +866,13 @@ document.addEventListener('click', async e => {
   }
 });
 /* 1분마다, 그리고 앱으로 돌아오면 조용히 새로고침 (시트가 열려 있거나 입력 중이면 건너뜀) */
+/* 입력칸을 누르면 키보드에 가리지 않게 아래 여백을 늘리고 그 칸을 화면 가운데로 옮긴다 */
+document.addEventListener('focusin', e => {
+  if (!e.target.matches('#sc input, #sc select, #sc textarea')) return;
+  document.body.classList.add('kb');
+  setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350);
+});
+document.addEventListener('focusout', () => setTimeout(() => { if (!document.activeElement?.matches('#sc input, #sc select, #sc textarea')) document.body.classList.remove('kb'); }, 200));
 AppKit.poll(refresh, 60000, () => sheet.isOpen || AppKit.editing());
 
 if (S.d) { setData(S.d); AppKit.bootDone(); }
