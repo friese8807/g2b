@@ -221,6 +221,15 @@ body.kb #sc{padding-bottom:50vh}
 .diag{color:var(--muted);font-size:11px;line-height:1.5;margin-top:16px;text-align:center;word-break:keep-all}
 .note{font-size:12.5px;color:var(--muted);line-height:1.55;margin:10px 4px}
 
+/* 공고 정보 표 (나라장터 '공고일반'처럼 이름 | 값) */
+.kv{margin:14px 0 0}
+.kv h4{display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:13.5px;font-weight:800}
+.kv h4::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--accent)}
+.kv dl{display:grid;grid-template-columns:9.6em 1fr;margin:0;border-top:2px solid var(--accent);font-size:13px}
+.kv dt,.kv dd{margin:0;padding:8px 10px;border-bottom:1px solid var(--line);word-break:keep-all;overflow-wrap:anywhere;line-height:1.45}
+.kv dt{background:var(--box);color:var(--muted);font-weight:600;white-space:nowrap;overflow-wrap:normal}
+.kv dd{font-weight:600}
+.t-urgent{background:var(--p-stop);color:var(--p-stop-ink)}
 /* 상세 시트 */
 .dt h2{margin:6px 0 4px;font-size:17px;line-height:1.38;color:var(--title);word-break:keep-all}
 .dt .org{font-size:13px;color:var(--muted)}
@@ -541,7 +550,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794676147';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794677456';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -581,7 +590,16 @@ const DEMO = (() => {
       top: { name: '(주)디지털맵스', amount: 655300000, rate: 86.512 }, mine: { rank: 7, amount: 659800000, rate: 87.106 }, bidders: [] },
   ];
   const d1 = AppKit.addDays(t, 1), d3 = AppKit.addDays(t, 3), d6 = AppKit.addDays(t, 6);
+  const INFO = (no, name, kind, rgst, method, dtl, cmeth, cdiv, crd, org, demand, ofcl, close, open, price, budget, extra) => [
+    { title: '공고일반', rows: [['공고종류', kind + '(' + rgst + ')'], ['게시일시', extra.post], ['입찰공고번호', no + ' - 000'], ['검사', '수요기관'], ['검수', '수요기관'],
+      ['입찰방식', '전자입찰'], ['낙찰방법', method], ['낙찰방법세부기준', dtl], ['계약방법', cmeth], ['계약구분', cdiv], ['국제입찰구분', '국내입찰'], ['채권자명', crd]] },
+    { title: '기관·담당자', rows: [['공고기관', org], ['수요기관', demand], ['담당자', ofcl]] },
+    { title: '일정·금액', rows: [['입찰마감', close], ['개찰일시', open], ['추정가격', price.toLocaleString('ko-KR') + '원'], ['배정예산', budget.toLocaleString('ko-KR') + '원'], ['업무구분', '일반용역']] },
+  ];
+  const d10 = AppKit.addDays(t, 4);
   const notices = [
+    { no: 'R26BK01777014', ord: '000', name: '해양예보 서비스 시스템 유지관리(`27~`28)', org: '조달청 부산지방조달청', demand: '국립해양조사원', postDt: '2026-10-22 16:29:06', closeDt: d10 + ' 10:00', opengDt: d10 + ' 11:00', price: 868000000, kind: 'Servc', urgent: true,
+      info: INFO('R26BK01777014', '', '실공고', '등록공고', '협상에의한계약', '협상에 의한 낙찰자 결정(SW사업)', '제한경쟁', '총액계약', '대한민국정부부부산지방조달청장', '조달청 부산지방조달청', '국립해양조사원 해양예보과', '김OO · 051-000-0000', d10 + ' 10:00', d10 + ' 11:00', 868000000, 954800000, { post: '2026/10/22 16:29:06' }) },
     { no: 'R26BK01250632', ord: '000', name: '해양 디지털트윈 기반 연안재해 예측 시스템 구축', org: '해양수산부', demand: '해양수산부 해양정책과', postDt: AppKit.addDays(t, -9) + ' 10:00', closeDt: d1 + ' 10:00', opengDt: d1 + ' 11:00', price: 1820000000, kind: 'Servc' },
     { no: 'R26BK01251190', ord: '000', name: '2027년 국가 해양공간정보 DB 정비 용역', org: '국립해양조사원', demand: '국립해양조사원 해양정보과', postDt: AppKit.addDays(t, -6) + ' 09:00', closeDt: d3 + ' 10:00', opengDt: d3 + ' 11:00', price: 742000000, kind: 'Servc' },
     { no: 'R26BK01252007', ord: '000', name: '연안 GIS 플랫폼 클라우드 전환 및 고도화', org: '조달청', demand: '인천광역시 해양항공국', postDt: AppKit.addDays(t, -3) + ' 14:00', closeDt: d6 + ' 10:00', opengDt: d6 + ' 11:00', price: 512500000, kind: 'Servc' },
@@ -640,6 +658,7 @@ async function demoApi(action, p) {
   if (action === 'read') { d.results.forEach(r => r.read = true); return d; }
   if (action === 'detail') return (d.results.find(r => r.key === p.key) || {}).bidders || [];
   if (action === 'test') return Object.assign({}, d, { sent: { mail: true, tg: true } });
+  if (action === 'notice') { const n = DEMO.notices.find(x => x.no === p.no); return n && n.info ? { info: n.info, url: '', urgent: !!n.urgent } : { info: [], url: '', urgent: false }; }
   return d;
 }
 
@@ -713,8 +732,8 @@ const KINDS = [['Servc', '용역'], ['Thng', '물품'], ['Cnstwk', '공사']];
 function noticeCard(n) {
   const on = isWatched(n.no), dd = dday(n.opengDt);
   const star = `<button class="star ${on ? 'on' : ''}" data-star="${esc(n.no)}" type="button">${on ? IC.star + '감시 중' : IC.starO + '감시'}</button>`;
-  return `<div class="bc" style="cursor:default"><div class="row"><div>
-    <div class="tags"><span class="tag t-blue">${({ Servc: '용역', Thng: '물품', Cnstwk: '공사' })[n.kind] || '입찰'}</span>${dd ? '<span class="tag t-violet">' + dd + '</span>' : ''}</div>
+  return `<div class="bc" data-notice="${esc(n.no)}"><div class="row"><div>
+    <div class="tags"><span class="tag t-blue">${({ Servc: '용역', Thng: '물품', Cnstwk: '공사' })[n.kind] || '입찰'}</span>${n.urgent ? '<span class="tag t-urgent">긴급</span>' : ''}${dd ? '<span class="tag t-violet">' + dd + '</span>' : ''}</div>
     <h3>${nm(n.name)}</h3><div class="org">${esc(n.org)}${n.demand && n.demand !== n.org ? ' · ' + esc(n.demand) : ''}</div></div>${star}</div>
     <div class="grid3"><div><small>추정가격</small><b class="num">${won(n.price)}</b></div><div><small>입찰마감</small><b class="num">${mdhm(n.closeDt)}</b></div><div><small>개찰</small><b class="num">${mdhm(n.opengDt)}</b></div></div></div>`;
 }
@@ -748,8 +767,8 @@ function renderWatch() {
   const chipList = (k, label, ph) => `<div class="card"><h2>${label} <span style="color:var(--muted);font-weight:600;font-size:12.5px">${(st[k] || []).length}개</span></h2>
     <p class="sub">${ph}</p><div class="chips" style="margin-top:0">${(st[k] || []).map(w => `<button class="chip" data-rm="${k}" data-v="${esc(w)}" type="button">${esc(w)} <span class="x">✕</span></button>`).join('')}</div>
     <form class="sbox" data-addto="${k}" style="margin-top:10px"><input class="fld" style="margin:0;height:42px" placeholder="추가할 낱말" autocomplete="off"><button class="btn sm" style="height:42px" type="submit">추가</button></form></div>`;
-  const wl = W.length ? W.map(w => `<div class="bc" style="cursor:default"><div class="row"><div>
-      <div class="tags"><span class="tag ${statusCls(w.status)}">${esc(w.status || '대기')}</span>${w.status === '대기' && dday(w.opengDt) ? '<span class="tag t-violet">개찰 ' + dday(w.opengDt) + '</span>' : ''}</div>
+  const wl = W.length ? W.map(w => `<div class="bc" data-notice="${esc(w.no)}"><div class="row"><div>
+      <div class="tags"><span class="tag ${statusCls(w.status)}">${esc(w.status || '대기')}</span>${w.urgent ? '<span class="tag t-urgent">긴급</span>' : ''}${w.status === '대기' && dday(w.opengDt) ? '<span class="tag t-violet">개찰 ' + dday(w.opengDt) + '</span>' : ''}</div>
       <h3>${nm(w.name)}</h3><div class="org">${esc(w.demand || w.org)} · 개찰 ${mdhm(w.opengDt)}</div></div>
       <button class="star on" data-star="${esc(w.no)}" type="button">${IC.star}해제</button></div></div>`).join('')
     : '<div class="ak-empty">감시 중인 공고가 없어요. 검색 탭에서 별표를 눌러 추가하세요.</div>';
@@ -800,6 +819,38 @@ function renderSet() {
 
 /* ───────── 상세 시트 ───────── */
 const sheet = AppKit.sheet('#sheet');
+const NOTICE = {};   // 공고번호 → { info, url, urgent } (한 번 받은 것은 다시 묻지 않는다)
+function infoHtml(info) {
+  return (info || []).map(sec => `<div class="kv"><h4>${esc(sec.title)}</h4><dl>${sec.rows.map(([k, v]) =>
+    `<dt>${esc(k)}</dt><dd>${k === '공고명' ? nm(v) : esc(v)}</dd>`).join('')}</dl></div>`).join('');
+}
+const g2bLink = (url, no) => `<a class="btn wide ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-top:14px" href="${esc(url || 'https://www.g2b.go.kr')}" target="_blank" rel="noopener">${url ? '나라장터 공고 원문 보기' : '나라장터에서 보기 (공고번호 ' + esc(no) + ')'}</a>`;
+async function noticeOf(no, kind) {
+  const w = (S.d?.watches || []).find(x => x.no === no && (x.info || []).length) || (S.found?.items || []).find(x => x.no === no && (x.info || []).length);
+  if (w) return { info: w.info, url: w.url, urgent: w.urgent };
+  if (!NOTICE[no]) NOTICE[no] = await api('notice', { no, kind });
+  return NOTICE[no];
+}
+async function openNotice(no) {
+  const n = (S.found?.items || []).find(x => x.no === no) || (S.d?.watches || []).find(x => x.no === no); if (!n) return;
+  const box = document.getElementById('sheetBody');
+  const draw = (d, loading) => {
+    const on = isWatched(no), dd = dday(n.opengDt);
+    box.innerHTML = `<div class="dt"><div class="tags" style="display:flex;gap:5px;flex-wrap:wrap"><span class="tag t-blue">${({ Servc: '용역', Thng: '물품', Cnstwk: '공사' })[n.kind] || '입찰'}</span>${(d && d.urgent) || n.urgent ? '<span class="tag t-urgent">긴급공고</span>' : ''}${n.status ? '<span class="tag ' + statusCls(n.status) + '">' + esc(n.status) + '</span>' : ''}${dd ? '<span class="tag t-violet">개찰 ' + dd + '</span>' : ''}</div>
+      <h2>${nm(n.name)}</h2><div class="org">${esc(n.org)}${n.demand && n.demand !== n.org ? ' · ' + esc(n.demand) : ''}</div>
+      ${loading ? '<div class="ak-empty">공고 정보를 불러오는 중…</div>' : d && d.info.length ? infoHtml(d.info)
+        : `<dl class="facts"><dt>공고번호</dt><dd>${esc(n.no)}-${esc(n.ord || '000')}</dd><dt>입찰마감</dt><dd>${esc(n.closeDt || '-')}</dd><dt>개찰일시</dt><dd>${esc(n.opengDt || '-')}</dd><dt>추정가격</dt><dd>${wonFull(n.price)}</dd></dl>`}
+      <button class="btn wide ${on ? 'ghost' : ''}" style="margin-top:14px" data-star="${esc(no)}" type="button">${on ? '감시 해제' : '★ 감시에 넣기 — 개찰결과가 나오면 알림'}</button>
+      ${g2bLink(d && d.url, no)}</div>`;
+  };
+  const has = (n.info || []).length;
+  draw(has ? { info: n.info, url: n.url, urgent: n.urgent } : null, !has);
+  sheet.open();
+  if (!has) {
+    let d = null; try { d = await noticeOf(no, n.kind); } catch (e) { d = null; }
+    if (sheet.isOpen) draw(d, false);
+  }
+}
 async function openDetail(key) {
   const r = (S.d?.results || []).find(x => x.key === key); if (!r) return;
   const box = document.getElementById('sheetBody');
@@ -812,7 +863,8 @@ async function openDetail(key) {
       ${loading ? '<div class="ak-empty">업체별 순위를 불러오는 중…</div>' : bd.length ? `<table class="bd"><tr><th>순위</th><th>업체</th><th class="r">투찰금액</th><th class="r">투찰률</th></tr>
         ${bd.map(b => `<tr class="${b.mine ? 'mine' : ''}"><td>${b.rank || '-'}</td><td class="nm">${esc(b.name)}${b.rmrk && b.rmrk !== '정상' ? '<br><small style="color:var(--muted)">' + esc(b.rmrk) + '</small>' : ''}</td><td class="r num">${won(b.amount)}</td><td class="r num">${rate(b.rate)}</td></tr>`).join('')}</table>`
         : '<div class="ak-empty">업체별 순위가 아직 없어요</div>'}
-      <a class="btn wide ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-top:14px" href="https://www.g2b.go.kr" target="_blank" rel="noopener">나라장터에서 보기 (공고번호 ${esc(r.no)})</a></div>`;
+      <div id="rNotice">${r.notice ? infoHtml(r.notice.info) : ''}</div>
+      ${g2bLink(r.notice && r.notice.url, r.no)}</div>`;
   };
   draw(r.bidders || [], !(r.bidders || []).length && r.status === '개찰완료');
   sheet.open();
@@ -820,6 +872,11 @@ async function openDetail(key) {
   if (!(r.bidders || []).length && r.status === '개찰완료') {
     try { r.bidders = await api('detail', { key, no: r.no, ord: r.ord }); } catch (e) { r.bidders = []; }
     if (sheet.isOpen) draw(r.bidders, false);
+  }
+  // 공고 정보(공고일반 등)는 결과 아래에 붙인다
+  if (!r.notice) {
+    try { r.notice = await noticeOf(r.no); } catch (e) { r.notice = null; }
+    if (sheet.isOpen && r.notice) draw(r.bidders || [], false);
   }
 }
 
@@ -864,11 +921,14 @@ document.addEventListener('click', async e => {
   const op = t.closest('[data-open]'); if (op) return openDetail(op.dataset.open);
   const st = t.closest('[data-star]');
   if (st) {
-    const no = st.dataset.star;
-    if (isWatched(no)) { if (!AppKit.sure(st, '해제할까요?')) return; return mutate('unwatch', { no }, '감시를 해제했어요'); }
-    const item = (S.found?.items || []).find(n => n.no === no);
-    return mutate('watch', { item }, '감시에 넣었어요. 개찰결과가 올라오면 알려 드릴게요');
+    const no = st.dataset.star, inSheet = !!st.closest('#sheet');
+    const after = () => { if (!inSheet) return; if ((S.found?.items || []).some(n => n.no === no)) openNotice(no); else sheet.close(); };
+    if (isWatched(no)) { if (!AppKit.sure(st, '해제할까요?')) return; await mutate('unwatch', { no }, '감시를 해제했어요'); return after(); }
+    const item = (S.found?.items || []).find(n => n.no === no) || (S.d?.watches || []).find(n => n.no === no);
+    if (!item) return AppKit.toast('공고 정보를 찾지 못했어요. 다시 검색해 주세요');
+    await mutate('watch', { item }, '감시에 넣었어요. 개찰결과가 올라오면 알려 드릴게요'); return after();
   }
+  const nt = t.closest('[data-notice]'); if (nt) return openNotice(nt.dataset.notice);
   const dy = t.closest('[data-days]'); if (dy) { S.q.days = +dy.dataset.days; LS.set('q', S.q); return S.q.text || S.found ? doSearch() : tabs.go('search', 0); }
   const kd = t.closest('[data-kind]');
   if (kd) { const k = kd.dataset.kind; S.q.kinds = S.q.kinds.includes(k) ? (S.q.kinds.length > 1 ? S.q.kinds.filter(x => x !== k) : S.q.kinds) : [...S.q.kinds, k]; LS.set('q', S.q); return S.found ? doSearch() : tabs.go('search', 0); }

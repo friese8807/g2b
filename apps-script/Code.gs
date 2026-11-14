@@ -64,6 +64,7 @@ function handle_(req) {
     if (a === 'saveSettings') { saveSettings_(req.settings || {}); return ok_(snapshot_()); }
     if (a === 'read') { markRead_(req.all ? null : req.keys || []); return ok_({ done: true }); }
     if (a === 'detail') return ok_(detail_(req.key, req.no, req.ord));
+    if (a === 'notice') return ok_(notice_(String(req.no || ''), req.kind));
     if (a === 'test') { const sent = testNotify(); const sn = snapshot_(); sn.sent = sent; return ok_(sn); }
     if (a === 'checkNow') { const n = check_(true); const s = snapshot_(); s.newCount = n; return ok_(s); }
     return { ok: false, code: 'bad', message: '알 수 없는 요청이에요' };
@@ -161,7 +162,8 @@ function addWatch_(item) {
   if (!item || !item.no) throw new Error('공고 정보가 없어요');
   const list = watches_().filter(w => w.no !== item.no);
   list.unshift({ no: item.no, ord: item.ord || '', name: item.name, org: item.org, demand: item.demand, opengDt: item.opengDt,
-    closeDt: item.closeDt, price: item.price, kind: item.kind || 'Servc', status: '대기', addedAt: now_() });
+    closeDt: item.closeDt, price: item.price, kind: item.kind || 'Servc', urgent: !!item.urgent, url: item.url || '', info: item.info || [],
+    status: '대기', addedAt: now_() });
   writeWatches_(list);
 }
 function removeWatch_(no) { writeWatches_(watches_().filter(w => w.no !== no)); }
@@ -214,11 +216,82 @@ function search_(text, days, kinds) {
 }
 
 function mapNotice_(r) {
+  const d = noticeInfo_(r);
   return {
     no: String(r.bidNtceNo || '').trim(), ord: String(r.bidNtceOrd || '').trim(), name: r.bidNtceNm || '',
     org: r.ntceInsttNm || '', demand: r.dminsttNm || '', postDt: r.bidNtceDt || '', closeDt: r.bidClseDt || '',
     opengDt: r.opengDt || '', price: Number(r.presmptPrce || r.asignBdgtAmt || 0) || 0, kind: r._kind || 'Servc',
+    urgent: d.urgent, url: d.url, info: d.sections,
   };
+}
+
+/** 나라장터 '공고일반' 표처럼 정리한 공고 정보.
+ *  API 필드 이름이 확실하지 않은 칸(검사·검수·낙찰방법세부기준·계약구분)은 후보 이름을 차례로 보고, 값이 없으면 칸을 숨긴다.
+ *  실제 필드 이름은 inspectNotice('공고번호') 를 실행하면 실행 기록에 모두 찍힌다 */
+function noticeInfo_(r) {
+  const pick = keys => { for (let i = 0; i < keys.length; i++) { const v = r[keys[i]]; if (v != null && String(v).trim() !== '') return String(v).trim(); } return ''; };
+  const yn = (v, y, n) => v === 'Y' ? y : v === 'N' ? n : '';
+  const money = v => { const n = Number(v); return n ? n.toLocaleString('ko-KR') + '원' : ''; };
+  const kind = pick(['ntceKindNm']), rgst = pick(['rgstTyNm']);
+  const allText = [r.bidNtceNm, kind, rgst, pick(['ntceDivNm', 'bidNtceSttusNm'])].join(' ');
+  const urgent = /긴급/.test(allText) || pick(['emrgncyNtceYn', 'urgntNtceYn', 'emrgncyYn']) === 'Y';
+  const intl = pick(['intrntnlDivNm', 'intrbidDivNm']) || yn(pick(['intrbidYn']), '국제입찰', '국내입찰');
+  const ofcl = [pick(['ntceInsttOfclNm']), pick(['ntceInsttOfclTelNo'])].filter(Boolean).join(' · ');
+  const sections = [
+    { title: '공고일반', rows: [
+      ['공고종류', kind && rgst && kind !== rgst ? kind + '(' + rgst + ')' : kind || rgst],
+      ['게시일시', pick(['bidNtceDt', 'rgstDt'])],
+      ['입찰공고번호', (r.bidNtceNo || '') + (r.bidNtceOrd ? ' - ' + r.bidNtceOrd : '')],
+      ['참조번호', pick(['refNo'])],
+      ['검사', pick(['inspctInsttNm', 'insptInsttNm', 'inspctNm', 'chckInsttNm', 'exmnInsttNm'])],
+      ['검수', pick(['acptncInsttNm', 'inspctAcptncInsttNm', 'acptnInsttNm', 'gdsAcptncInsttNm'])],
+      ['입찰방식', pick(['bidMethdNm'])],
+      ['낙찰방법', pick(['sucsfbidMthdNm', 'bidwinrDcsnMthdNm'])],
+      ['낙찰방법세부기준', pick(['sucsfbidMthdDtlNm', 'bidwinrDcsnMthdDtlNm', 'sucsfbidDtlMthdNm', 'sucsfbidMthdDtlCntnts'])],
+      ['계약방법', pick(['cntrctCnclsMthdNm'])],
+      ['계약구분', pick(['cntrctDivNm', 'cntrctTyNm', 'cntrctKindNm', 'lngtrmCtnuDivNm'])],
+      ['국제입찰구분', intl],
+      ['채권자명', pick(['crdtrNm'])],
+    ] },
+    { title: '기관·담당자', rows: [
+      ['공고기관', pick(['ntceInsttNm'])], ['수요기관', pick(['dminsttNm'])], ['집행관', pick(['exctvNm'])], ['담당자', ofcl],
+    ] },
+    { title: '일정·금액', rows: [
+      ['입찰개시', pick(['bidBeginDt'])], ['입찰마감', pick(['bidClseDt'])], ['개찰일시', pick(['opengDt'])], ['개찰장소', pick(['opengPlce'])],
+      ['추정가격', money(pick(['presmptPrce']))], ['배정예산', money(pick(['asignBdgtAmt']))],
+      ['낙찰하한율', pick(['sucsfbidLwltRate']) ? pick(['sucsfbidLwltRate']) + '%' : ''],
+      ['업무구분', pick(['srvceDivNm'])], ['예정가격 방식', pick(['prearngPrceDcsnMthdNm'])],
+    ] },
+  ].map(sec => ({ title: sec.title, rows: sec.rows.filter(x => x[1]) })).filter(sec => sec.rows.length);
+  return { urgent: urgent, url: pick(['bidNtceDtlUrl', 'bidNtceUrl']), sections: sections };
+}
+
+/** 공고 하나의 정보 (감시 목록에 있으면 그것, 없으면 나라장터에서 공고번호로 조회) */
+function notice_(no, kind) {
+  const w = watches_().filter(x => x.no === no && x.info)[0];
+  if (w) return { info: w.info, url: w.url || '', urgent: !!w.urgent };
+  const pref = Number(P.getProperty('bidApi') || 0), order = [pref, 1 - pref];
+  for (let i = 0; i < order.length; i++) {
+    const api = BID_APIS[order[i]];
+    try {
+      const items = fetchAll_(api.base + 'getBidPblancListInfo' + (kind || 'Servc') + api.suffix, { inqryDiv: '2', bidNtceNo: no }, 10, 1);
+      if (!items.length) continue;
+      items.sort((a, b) => String(b.bidNtceOrd).localeCompare(String(a.bidNtceOrd)));
+      const d = noticeInfo_(items[0]);
+      return { info: d.sections, url: d.url, urgent: d.urgent };
+    } catch (e) { if (/LIMITED|한도|SERVICE_KEY|등록되지/i.test(String(e.message))) throw e; }
+  }
+  return { info: [], url: '', urgent: false };
+}
+
+/** 필드 이름 확인용: 공고 하나의 원본 필드를 모두 실행 기록에 찍는다 (예: inspectNotice('R26BK01777014')) */
+function inspectNotice(no) {
+  no = no || 'R26BK01777014';
+  const api = BID_APIS[Number(P.getProperty('bidApi') || 0)];
+  const items = fetchAll_(api.base + 'getBidPblancListInfoServc' + api.suffix, { inqryDiv: '2', bidNtceNo: no }, 10, 1);
+  if (!items.length) { console.log('공고를 찾지 못했어요: ' + no); return; }
+  const r = items[items.length - 1];
+  Object.keys(r).filter(k => r[k] !== '' && r[k] != null).forEach(k => console.log(k + ' = ' + r[k]));
 }
 
 /** 입찰공고 PPSSrch 호출 — 새 이름(02) → 옛 이름 순서로 시도하고 되는 쪽을 기억 */
