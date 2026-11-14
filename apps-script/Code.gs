@@ -207,27 +207,65 @@ function search_(text, days, kinds) {
     const items = Object.keys(map).map(k => map[k]);
     return { items: items, total: items.length, note: items.length ? '' : traceText_() };
   }
-  kinds.forEach(k => {
-    // 기간이 길면 30일씩 나눠 부른다
-    for (let end = now; end > now - days * 864e5; end = new Date(end - 30 * 864e5)) {
-      const begin = new Date(Math.max(end - 30 * 864e5, now - days * 864e5));
-      const base = { inqryDiv: '1', inqryBgnDt: fmt_(begin), inqryEndDt: fmt_(end) };
-      if (!text) { bidCall_(k, base, 50, 2).forEach(add); continue; }
-      bidCall_(k, Object.assign({ bidNtceNm: text }, base), 50, 4).forEach(add);
-      // 기관 이름으로도 찾는다 (예: '국립해양조사원')
-      bidCall_(k, Object.assign({ dminsttNm: text }, base), 50, 2).forEach(add);
-      bidCall_(k, Object.assign({ ntceInsttNm: text }, base), 50, 2).forEach(add);
+  // 입찰공고 API(2026-11 개편 후)는 긴 기간을 주면 오류 없이 0건을 준다(1일은 되고 7·30일은 0건이었다).
+  // → 되는 기간 길이를 알아내(bidWindow_) 그 길이로 잘라 한꺼번에 부른다
+  const W = bidWindow_(kinds[0]), wins = [];
+  for (let end = +now; end > +now - days * 864e5; end -= W * 864e5) wins.push([new Date(Math.max(end - W * 864e5, +now - days * 864e5)), new Date(end)]);
+  const run = field => {
+    const list = [];
+    kinds.forEach(k => wins.forEach(([b, e]) => {
+      const prm = { numOfRows: 100, pageNo: 1, inqryDiv: '1', inqryBgnDt: fmt_(b), inqryEndDt: fmt_(e) };
+      if (field) prm[field] = text;
+      list.push({ k: k, params: prm });
+    }));
+    let pref = Number(P.getProperty('bidApi') || 0);
+    for (let tryN = 0; tryN < 2; tryN++) {
+      const api = BID_APIS[pref], label = api.suffix ? '새 주소(02)' : '옛 주소';
+      const res = fetchMany_(list.map(x => ({ url: api.base + 'getBidPblancListInfo' + x.k + 'PPSSrch' + api.suffix, params: x.params })));
+      let n = 0, errs = 0, lastErr = '';
+      res.forEach((r, i) => {
+        if (r.err) { errs++; lastErr = r.err; return; }
+        const it = r.body.items, items = Array.isArray(it) ? it : it && it.item ? [].concat(it.item) : [];
+        items.forEach(x => { x._kind = list[i].k; add(x); }); n += items.length;
+      });
+      TRACE.push({ api: label + ' ' + W + '일씩', n: n, calls: res.length, err: errs ? errs + '번 실패: ' + lastErr : '' });
+      if (n > 0) { P.setProperty('bidApi', String(pref)); return; }
+      pref = 1 - pref;   // 0건이거나 전부 실패면 다른 주소로 한 번 더 (개편 직후 한쪽만 자료가 있을 수 있다)
     }
-  });
+  };
+  if (!text) run(null);
+  else {
+    run('bidNtceNm');
+    // 공고명으로 못 찾았거나 기관 이름처럼 보이면 공고기관·수요기관으로도 찾는다
+    if (!Object.keys(map).length || /(부|청|원|처|청|공사|공단|시|군|구|도|센터|연구소|재단|대학교|위원회)$/.test(text)) { run('dminsttNm'); run('ntceInsttNm'); }
+  }
   const items = Object.keys(map).map(k => map[k]).sort((a, b) => String(b.postDt).localeCompare(String(a.postDt))).slice(0, 150);
   return { items: items, total: items.length, note: items.length ? '' : traceText_() };
+}
+
+/** 입찰공고 API가 받아 주는 기간 길이(일). 조건 없이 1일치 건수를 기준으로, 더 긴 기간이 그 이상을 주면 된다고 본다.
+ *  알아낸 값은 1주일 동안 기억한다. 1일치가 0건(연휴 새벽 등)이면 판단하지 않고 1일로 */
+function bidWindow_(kind) {
+  const memo = String(P.getProperty('bidWin') || '').split('|');
+  if (memo[0] && memo[1] && Date.now() - Number(memo[1]) < 7 * 864e5) return Number(memo[0]);
+  const api = BID_APIS[Number(P.getProperty('bidApi') || 0)], now = new Date();
+  const total = d => { try { return Number(call_(api.base + 'getBidPblancListInfo' + (kind || 'Servc') + 'PPSSrch' + api.suffix,
+    { numOfRows: 1, pageNo: 1, inqryDiv: '1', inqryBgnDt: fmt_(new Date(now - d * 864e5)), inqryEndDt: fmt_(now) }).totalCount || 0); } catch (e) { return -1; } };
+  const c1 = total(1);
+  if (c1 <= 0) return 1;
+  const tries = [31, 15, 7, 3, 2];
+  for (let i = 0; i < tries.length; i++) {
+    if (total(tries[i]) >= c1) { P.setProperty('bidWin', tries[i] + '|' + Date.now()); return tries[i]; }
+  }
+  P.setProperty('bidWin', '1|' + Date.now());
+  return 1;
 }
 
 /** 0건일 때 앱에 보여 줄 '서버가 실제로 받은 것' 요약 */
 let TRACE = [];
 function traceText_() {
   const g = {};
-  TRACE.forEach(t => { const k = t.api; g[k] = g[k] || { n: 0, calls: 0, err: '' }; g[k].calls++; g[k].n += t.n; if (t.err) g[k].err = t.err; });
+  TRACE.forEach(t => { const k = t.api; g[k] = g[k] || { n: 0, calls: 0, err: '' }; g[k].calls += t.calls || 1; g[k].n += t.n; if (t.err) g[k].err = t.err; });
   return '서버 조회 결과: ' + Object.keys(g).map(k => k + ' ' + g[k].calls + '번 ' + g[k].n + '건' + (g[k].err ? ' (오류: ' + g[k].err.slice(0, 60) + ')' : '')).join(' · ');
 }
 
@@ -409,7 +447,9 @@ function check_(force) {
         });
       const begin = new Date(now - 2 * 864e5);
       s.kinds.forEach(k => s.keywords.forEach(kw => {
-        fetchAll_(SCRS + 'getOpengResultListInfo' + k + 'PPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(begin), inqryEndDt: fmt_(now), bidNtceNm: kw }, 20, 5)
+        // 긴 기간은 0건이 될 수 있어 하루씩 두 번
+        [[new Date(now - 864e5), now], [begin, new Date(now - 864e5)]].reduce((acc, [b, e]) =>
+          acc.concat(fetchAll_(SCRS + 'getOpengResultListInfo' + k + 'PPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(b), inqryEndDt: fmt_(e), bidNtceNm: kw }, 20, 5)), [])
           .forEach(r => { const v = via_(r, s, W); if (v) add(r, v); });
       }));
       P.setProperty('lastSweep', String(now.getTime()));
@@ -622,22 +662,49 @@ function fetchAll_(url, params, rows, pages) {
   return out;
 }
 
-function call_(url, params) {
+function url_(url, params) {
   // 다른 앱(올포오션 등)과 같은 인증키를 쓰므로 속성 이름은 둘 다 받는다
   const key = P.getProperty('G2B_KEY') || P.getProperty('DATA_GO_KR_KEY');
   if (!key) throw new Error('스크립트 속성 G2B_KEY(공공데이터포털 인증키)가 없어요');
   const q = Object.keys(params).filter(k => params[k] !== '' && params[k] != null).map(k => k + '=' + encodeURIComponent(params[k])).join('&');
-  const full = url + '?serviceKey=' + (key.indexOf('%') >= 0 ? key : encodeURIComponent(key)) + '&type=json&' + q;
-  const ck = 'calls|' + day_();
-  P.setProperty(ck, String(Number(P.getProperty(ck) || 0) + 1));
-  let res, text;
+  return url + '?serviceKey=' + (key.indexOf('%') >= 0 ? key : encodeURIComponent(key)) + '&type=json&' + q;
+}
+function count_(n) { const ck = 'calls|' + day_(); P.setProperty(ck, String(Number(P.getProperty(ck) || 0) + n)); }
+
+/** 여러 조회를 한꺼번에(병렬로) — 10개씩 묶어 보낸다. 결과는 [{ body } 또는 { err }] */
+function fetchMany_(list) {
+  const out = [];
+  for (let i = 0; i < list.length; i += 10) {
+    const part = list.slice(i, i + 10);
+    count_(part.length);
+    const res = UrlFetchApp.fetchAll(part.map(x => ({ url: url_(x.url, x.params), muteHttpExceptions: true })));
+    res.forEach((r, k) => {
+      try { out.push({ body: parse_(r, part[k].url) }); }
+      catch (e) {
+        if (/LIMITED|한도/i.test(String(e.message))) throw e;
+        out.push({ err: String(e.message || e) });
+      }
+    });
+  }
+  return out;
+}
+
+function call_(url, params) {
+  const full = url_(url, params);
+  count_(1);
+  let res;
   for (let i = 0; i < 3; i++) {
     res = UrlFetchApp.fetch(full, { muteHttpExceptions: true });
-    text = res.getContentText();
     if (res.getResponseCode() < 500) break;
     Utilities.sleep(1500 * (i + 1));
   }
-  if (res.getResponseCode() === 404) throw new Error('없는 주소 (404): ' + url.split('/').pop());
+  return parse_(res, url);
+}
+
+function parse_(res, url) {
+  const text = res.getContentText();
+  if (res.getResponseCode() === 404) throw new Error('없는 주소 (404): ' + String(url).split('/').pop());
+  if (res.getResponseCode() >= 500) throw new Error('나라장터 서버 오류 ' + res.getResponseCode());
   // 키 오류·호출 한도는 JSON 대신 XML로 온다
   if (/^\s*</.test(text)) { const m = text.match(/<(returnAuthMsg|errMsg|resultMsg)>([^<]*)</); throw new Error(m ? m[2] : 'XML 응답: ' + text.slice(0, 120)); }
   const j = JSON.parse(text);
@@ -701,7 +768,8 @@ function testApi() {
 /** ③ 시험 알림: 최근 개찰결과 1건으로 메일·텔레그램을 보내 봄 (결과 목록에는 저장하지 않음) */
 function testNotify() {
   const now = new Date(), s = settings_();
-  const items = fetchAll_(SCRS + 'getOpengResultListInfoServcPPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(new Date(now - 3 * 864e5)), inqryEndDt: fmt_(now) }, 10, 1);
+  let items = [];
+  for (let d = 0; d < 4 && !items.length; d++) items = fetchAll_(SCRS + 'getOpengResultListInfoServcPPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(new Date(now - (d + 1) * 864e5)), inqryEndDt: fmt_(new Date(now - d * 864e5)) }, 10, 1);
   const raw = items.filter(x => x.progrsDivCdNm === '개찰완료')[0] || items[0];
   let r;
   if (raw) { raw._via = '시험'; r = buildResult_(raw, s); r.name = '[시험] ' + r.name; }
