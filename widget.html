@@ -18,13 +18,14 @@ button,a.btn{display:block;width:100%;border:0;border-radius:12px;background:var
 a.btn.sec{background:var(--code);color:var(--ink);border:1px solid var(--line)}
 </style></head><body><main>
 <h1>개찰알림 위젯 설치</h1>
-<p class="muted">아이폰 홈 화면·잠금 화면에서 바로 볼 수 있어요. 15~30분마다 저절로 새로 고쳐지고, 누르면 앱이 열려요.</p>
+<p class="muted">새 알림·오늘 개찰·개찰 대기 숫자와 최근 개찰결과를 아이폰 홈 화면·잠금 화면에서 바로 볼 수 있어요. 15~30분마다 저절로 새로 고쳐지고, 누르면 앱이 열려요.</p>
 
 <div class="card"><h2>1. Scriptable 앱 설치 (무료)</h2>
 <a class="btn sec" href="https://apps.apple.com/app/scriptable/id1405459188">앱스토어에서 Scriptable 받기</a></div>
 
 <div class="card"><h2>2. 코드 복사</h2>
 <button id="copy">코드 복사하기</button>
+<p class="muted" id="auto" hidden style="margin-top:8px">✓ 앱에 연결된 서버 주소·암호를 코드에 넣어 두었어요.</p>
 <pre id="code">불러오는 중…</pre></div>
 
 <div class="card"><h2>3. Scriptable에 붙여 넣기</h2>
@@ -40,7 +41,11 @@ a.btn.sec{background:var(--code);color:var(--ink);border:1px solid var(--line)}
 </main>
 <script>
 // 로더는 같은 폴더의 widget-loader.txt 에서 읽는다 (.js 로 두면 브라우저가 내려받기도 해서 .txt 로 올린다)
-fetch("widget-loader.txt?t="+Date.now()).then(r=>r.text()).then(t=>{document.getElementById("code").textContent=t}).catch(()=>{document.getElementById("code").textContent="코드를 불러오지 못했어요. 새로 고쳐 주세요."});
+// 앱에서 연결해 둔 서버 주소·암호가 있으면 로더에 채워 넣는다 (앱과 같은 주소라 저장소를 같이 쓴다)
+let conn=null;try{conn=JSON.parse(localStorage.getItem("g2b-alert.conn")||"null")}catch(e){}
+fetch("widget-loader.txt?t="+Date.now()).then(r=>r.text()).then(t=>{
+ if(conn&&conn.url){t=t.replace('const SERVER = "";','const SERVER = '+JSON.stringify(conn.url)+';').replace('const TOKEN = "";','const TOKEN = '+JSON.stringify(conn.token||"")+';');document.getElementById("auto").hidden=false}
+ document.getElementById("code").textContent=t}).catch(()=>{document.getElementById("code").textContent="코드를 불러오지 못했어요. 새로 고쳐 주세요."});
 document.getElementById("copy").onclick=async e=>{const el=document.getElementById("code"),t=el.textContent;
 try{await navigator.clipboard.writeText(t)}catch(x){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand("copy")}
 e.target.textContent="복사했어요 ✓";setTimeout(()=>e.target.textContent="코드 복사하기",2000)};

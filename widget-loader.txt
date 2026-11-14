@@ -1,7 +1,7 @@
 // 개찰알림 위젯 — Scriptable 앱에 이 글 전체를 붙여 넣어요. (처음 한 번만)
-// ▼ 필요하면 여기만 고쳐요
-const WHO = "";     // 이 폰을 쓰는 사람 (앱에 사람 구분이 없으면 그대로)
-const PIN = "";     // 앱 비밀번호 (없으면 그대로)
+// ▼ 설치 안내 페이지에서 복사하면 아래 두 줄이 자동으로 채워져요. 비어 있으면 앱 설정 탭의 주소·암호를 넣어요
+const SERVER = "";   // Apps Script 주소 (https://script.google.com/macros/s/…/exec)
+const TOKEN = "";    // 연결 암호
 
 // ---- 아래는 고치지 않아요. 위젯 본체를 인터넷에서 받아 항상 최신으로 유지해요. ----
 const fm = module.filename.includes("Documents/iCloud") || module.filename.includes("Mobile Documents") ? FileManager.iCloud() : FileManager.local();
@@ -14,4 +14,4 @@ try {
   if (code.includes("G2B_ALERT_WIDGET")) fm.writeString(core, code);   // 표식이 있을 때만 저장 (오류 페이지를 저장하지 않게)
 } catch (e) {}
 if (fm.isFileStoredIniCloud(core) && !fm.isFileDownloaded(core)) await fm.downloadFileFromiCloud(core);
-await importModule("g2b-alert-widget-core")({ who: WHO, pin: PIN });
+await importModule("g2b-alert-widget-core")({ server: SERVER, token: TOKEN });
