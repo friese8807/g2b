@@ -287,7 +287,9 @@ const AppKit = (() => {
     const set = () => {
       const portraitH = Math.max(screen.height, screen.width);
       const raw = innerHeight < innerWidth ? 0 : portraitH - innerHeight;
-      gap = standalone() && raw > 0 && raw < 160 ? raw : 0;
+      // 개찰알림: 사용자 아이폰(홈 화면 앱, 상태바 default)에서 raw 가 상태바 높이만큼 잡혀 탭바가 화면 밖으로 밀렸다.
+      // 보정을 끄고 실제 보이는 높이(innerHeight)만 쓴다. 혹시 아래에 띠가 남아도 html 배경이 탭바 색이라 이어져 보인다.
+      gap = 0; void raw;
       root.style.setProperty('--app-h', (innerHeight + gap) + 'px');
       root.classList.toggle('standalone', standalone());
     };
@@ -525,7 +527,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794672865';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794673022';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
