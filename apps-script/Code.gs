@@ -340,23 +340,38 @@ function bidCall_(kind, params, rows, pages, op) {
 /** 검색이 안 될 때 실행: 주소·조건별로 실제 응답을 실행 기록에 찍는다 (예: debugSearch('해양예보')) */
 function debugSearch(text) {
   text = text || '해양예보';
-  const now = new Date(), from = new Date(now - 30 * 864e5);
+  const now = new Date(), d1 = new Date(now - 864e5), d7 = new Date(now - 7 * 864e5), d30 = new Date(now - 30 * 864e5);
+  // 하루치 결과에서 낱말 하나를 뽑아 '이름 조건'이 동작하는지 본다
+  let word = '', sample = '';
+  try {
+    const b = call_(BID_APIS[0].base + 'getBidPblancListInfoServcPPSSrch02', { numOfRows: 5, pageNo: 1, inqryDiv: '1', inqryBgnDt: fmt_(d1), inqryEndDt: fmt_(now) });
+    const it = b.items, items = Array.isArray(it) ? it : it && it.item ? [].concat(it.item) : [];
+    if (items[0]) { sample = items[0].bidNtceNm; word = String(sample).replace(/[^가-힣A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length >= 2).pop() || ''; }
+  } catch (e) { console.log('하루치 조회 실패: ' + e.message); }
+  console.log('시험 낱말: "' + word + '" (원래 공고명: ' + sample + ')');
   const tries = [
-    ['이름 검색 · 게시일 기준(inqryDiv 1)', 'PPSSrch', { inqryDiv: '1', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(now), bidNtceNm: text }],
-    ['이름 검색 · 개찰일 기준(inqryDiv 2)', 'PPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(new Date(+now + 30 * 864e5)), bidNtceNm: text }],
-    ['기간만 (조건 없이)', 'PPSSrch', { inqryDiv: '1', inqryBgnDt: fmt_(new Date(now - 864e5)), inqryEndDt: fmt_(now) }],
-    ['공고번호 R26BK01777014', '', { inqryDiv: '2', bidNtceNo: 'R26BK01777014' }],
+    ['30일 · 조건 없음', { inqryDiv: '1', inqryBgnDt: fmt_(d30), inqryEndDt: fmt_(now) }],
+    ['7일 · 조건 없음', { inqryDiv: '1', inqryBgnDt: fmt_(d7), inqryEndDt: fmt_(now) }],
+    ['1일 · 공고명 "' + word + '"', { inqryDiv: '1', inqryBgnDt: fmt_(d1), inqryEndDt: fmt_(now), bidNtceNm: word }],
+    ['30일 · 공고명 "' + word + '"', { inqryDiv: '1', inqryBgnDt: fmt_(d30), inqryEndDt: fmt_(now), bidNtceNm: word }],
+    ['30일 · 공고명 "' + text + '"', { inqryDiv: '1', inqryBgnDt: fmt_(d30), inqryEndDt: fmt_(now), bidNtceNm: text }],
+    ['30일 · 공고명 "유지관리"', { inqryDiv: '1', inqryBgnDt: fmt_(d30), inqryEndDt: fmt_(now), bidNtceNm: '유지관리' }],
+    ['30일 · 공고기관 "부산지방조달청"', { inqryDiv: '1', inqryBgnDt: fmt_(d30), inqryEndDt: fmt_(now), ntceInsttNm: '부산지방조달청' }],
+    ['30일 · 수요기관 "국립해양조사원"', { inqryDiv: '1', inqryBgnDt: fmt_(d30), inqryEndDt: fmt_(now), dminsttNm: '국립해양조사원' }],
   ];
-  BID_APIS.forEach(api => tries.forEach(([label, op, prm]) => {
-    const url = api.base + 'getBidPblancListInfoServc' + op + api.suffix;
+  tries.forEach(([label, prm]) => {
     try {
-      const body = call_(url, Object.assign({ numOfRows: 5, pageNo: 1 }, prm));
+      const body = call_(BID_APIS[0].base + 'getBidPblancListInfoServcPPSSrch02', Object.assign({ numOfRows: 3, pageNo: 1 }, prm));
       const it = body.items, items = Array.isArray(it) ? it : it && it.item ? [].concat(it.item) : [];
-      console.log('✓ ' + (api.suffix ? '새(02) ' : '옛 ') + label + ' → 전체 ' + (body.totalCount || 0) + '건 ' + items.slice(0, 3).map(x => '[' + x.bidNtceNo + '] ' + x.bidNtceNm).join(' / '));
-    } catch (e) {
-      console.log('✗ ' + (api.suffix ? '새(02) ' : '옛 ') + label + ' → ' + e.message);
-    }
-  }));
+      console.log('✓ ' + label + ' → 전체 ' + (body.totalCount || 0) + '건 ' + items.slice(0, 2).map(x => '[' + x.bidNtceNo + '] ' + x.bidNtceNm).join(' / '));
+    } catch (e) { console.log('✗ ' + label + ' → ' + e.message); }
+  });
+  // 공고번호로 받은 이 공고의 게시일·등록일 (기간 조건과 비교용)
+  try {
+    const b = call_(BID_APIS[0].base + 'getBidPblancListInfoServc02', { numOfRows: 3, pageNo: 1, inqryDiv: '2', bidNtceNo: 'R26BK01777014' });
+    const it = b.items, x = (Array.isArray(it) ? it : it && it.item ? [].concat(it.item) : [])[0] || {};
+    console.log('이 공고: 게시 ' + x.bidNtceDt + ' · 등록 ' + x.rgstDt + ' · 변경 ' + (x.chgDt || '-') + ' · 공고기관 ' + x.ntceInsttNm + ' · 수요기관 ' + x.dminsttNm);
+  } catch (e) { console.log('공고번호 조회 실패: ' + e.message); }
 }
 
 // ════════════════════════ 개찰결과 감시 ════════════════════════
