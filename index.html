@@ -82,7 +82,8 @@ button{touch-action:manipulation}
 .is-busy::after{content:"";position:absolute;right:12px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;
   border:2px solid currentColor;border-right-color:transparent;animation:ak-spin .7s linear infinite}
 /* 2-3 배경 새로고침: 새로고침 아이콘만 돈다 */
-.ak-icon-btn{border:0;background:none;color:inherit;font-size:20px;width:40px;height:40px;border-radius:50%;cursor:pointer}
+.ak-icon-btn{border:0;background:none;color:inherit;font-size:20px;width:40px;height:40px;border-radius:50%;cursor:pointer;display:inline-grid;place-items:center;padding:0}
+.ak-icon-btn svg{display:block;transform-origin:50% 50%;will-change:transform}
 .ak-spin{animation:ak-spin .8s linear infinite}
 @keyframes ak-spin{to{transform:rotate(360deg)}}
 
@@ -174,7 +175,7 @@ body.kb #sc{padding-bottom:50vh}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
 .grid3>div{background:var(--box);border-radius:10px;padding:7px 8px;min-width:0}
 .grid3 small{display:block;font-size:10.5px;color:var(--muted);margin-bottom:2px}
-.grid3 b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid3 b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13.5px;line-height:1.3;overflow:hidden;word-break:keep-all;overflow-wrap:anywhere}
 .grid3 .mine{background:var(--mine);color:var(--mine-ink)}
 .grid3 .mine small{color:inherit;opacity:.8}
 
@@ -207,7 +208,7 @@ body.kb #sc{padding-bottom:50vh}
 .line{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .line:first-of-type{border-top:0}
 .line .lb{flex:1;min-width:0;font-size:14px;font-weight:600}
-.line .lb small{display:block;font-weight:400;font-size:12px;color:var(--muted);margin-top:2px;word-break:keep-all}
+.line .lb small{display:block;font-weight:400;font-size:12px;color:var(--muted);margin-top:2px;word-break:keep-all;text-wrap:balance}
 .line input[type=text],.line input[type=email],.line select,.fld{height:40px;border-radius:10px;border:1px solid var(--line);background:var(--box);color:var(--ink);padding:0 10px;font:inherit;font-size:16px;min-width:0}
 .fld{width:100%;margin-top:6px}
 .sw{position:relative;flex:none;width:50px;height:30px}
@@ -334,7 +335,20 @@ const AppKit = (() => {
       return track(p);
     };
   }
-  function spin(el, p) { el = $(el); el?.classList.add('ak-spin'); const off = () => el?.classList.remove('ak-spin'); p.then(off, off); return p; }
+  /* 아이콘만 돌린다(버튼째 돌리면 축이 어긋나 꿀렁거렸다). 응답이 오면 돌던 바퀴를 마저 돌고 0도에서 멈춘다(중간에 멈추면 툭 튀었다) */
+  function spin(el, p) {
+    el = $(el); if (!el) return p;
+    const ic = el.querySelector('svg') || el;
+    ic.dataset.spinN = (+ic.dataset.spinN || 0) + 1;
+    ic.classList.add('ak-spin');
+    const off = () => {
+      if (--ic.dataset.spinN > 0) return;
+      const stop = () => { if (+ic.dataset.spinN <= 0) ic.classList.remove('ak-spin'); };
+      ic.addEventListener('animationiteration', stop, { once: true });
+      setTimeout(stop, 2600);
+    };
+    p.then(off, off); return p;
+  }
   function setBusy({ label, emoji } = {}) { if (label) busyLabel = label; if (emoji) busyEmoji = emoji; }
 
   let toastTm = 0;
@@ -490,8 +504,8 @@ const AppKit = (() => {
   /* 지우기처럼 되돌릴 수 없는 버튼: 처음 누르면 글자가 "정말 삭제"로 바뀌고, 한 번 더 눌러야 참 */
   function sure(btn, label = '정말 삭제') {
     if (btn.dataset.sure) return true;
-    const old = btn.textContent; btn.dataset.sure = '1'; btn.textContent = label;
-    setTimeout(() => { if (document.contains(btn)) { delete btn.dataset.sure; btn.textContent = old; } }, 3000);
+    const old = btn.innerHTML; btn.dataset.sure = '1'; btn.textContent = label;
+    setTimeout(() => { if (document.contains(btn)) { delete btn.dataset.sure; btn.innerHTML = old; } }, 3000);
     return false;
   }
   async function copy(text) {
@@ -527,7 +541,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794673022';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794676147';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -625,6 +639,7 @@ async function demoApi(action, p) {
   if (action === 'saveSettings') { d.settings = Object.assign(d.settings, p.settings); return d; }
   if (action === 'read') { d.results.forEach(r => r.read = true); return d; }
   if (action === 'detail') return (d.results.find(r => r.key === p.key) || {}).bidders || [];
+  if (action === 'test') return Object.assign({}, d, { sent: { mail: true, tg: true } });
   return d;
 }
 
@@ -649,7 +664,14 @@ function setData(d, redraw = true) {
   S.d = d; if (!S.demo) LS.set('data', d);
   const n = (d.results || []).filter(r => !r.read).length, b = document.getElementById('badge');
   b.hidden = !n; b.textContent = n > 99 ? '99+' : n;
-  if (redraw && !sheet.isOpen && !AppKit.editing()) tabs.go(tabs.current, 0);
+  const sig = JSON.stringify(d);
+  if (sig === S.sig) return; S.sig = sig;
+  if (redraw && !sheet.isOpen && !AppKit.editing()) redrawKeep();
+}
+
+function redrawKeep() {
+  const sc = document.getElementById('sc'), top = sc.scrollTop;
+  tabs.go(tabs.current, 0); sc.scrollTop = top;
 }
 
 /* ───────── 글자·숫자 도우미 ───────── */
@@ -662,6 +684,7 @@ const dday = dt => {
   const n = Math.round((b - a) / 864e5); return n === 0 ? '오늘' : n > 0 ? 'D-' + n : '';
 };
 const mdhm = dt => { const m = String(dt || '').match(/\d{4}-(\d\d)-(\d\d)[ T](\d\d:\d\d)/); return m ? +m[1] + '/' + +m[2] + ' ' + m[3] : esc(dt || ''); };
+const nm = t => esc(String(t || '').replace(/(\S)\(/g, '$1\u200B('));
 const isWatched = no => (S.d?.watches || []).some(w => w.no === no);
 const IC = { star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
   starO: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>' };
@@ -670,7 +693,7 @@ const IC = { star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 
 function cardA(r) {
   return `<div class="bc" data-open="${esc(r.key)}">
     <div class="tags"><span class="tag ${statusCls(r.status)}">${esc(r.status)}</span>${r.read ? '' : '<span class="tag t-new">NEW</span>'}<span class="tag">${esc(r.via || '')}</span><span class="tm">${mdhm(r.at)}</span></div>
-    <h3>${esc(r.name)}</h3><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
+    <h3>${nm(r.name)}</h3><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
     <div class="grid3">
       <div><small>1순위</small><b>${r.top ? esc(r.top.name) : r.status === '유찰' ? '유찰' : '-'}</b></div>
       <div><small>투찰률</small><b class="num">${r.top ? rate(r.top.rate) : '-'}</b></div>
@@ -679,7 +702,7 @@ function cardA(r) {
 }
 function renderFeed() {
   const R = S.d?.results || [], W = S.d?.watches || [];
-  const empty = `<div class="ak-empty">아직 받은 개찰결과가 없어요.<br>검색 탭에서 사업을 찾아 감시에 넣거나, 감시 탭에 키워드를 넣어 두세요.</div>`;
+  const empty = `<div class="ak-empty">아직 받은 개찰결과가 없어요. 검색 탭에서 사업을 찾아 감시에 넣거나, 감시 탭에 키워드를 넣어 두세요.</div>`;
   const unread = R.filter(r => !r.read).length;
   const head = `<div class="sec">받은 개찰결과 <span class="n">${R.length}건</span>${unread ? '<button class="r chip" data-act="readAll" type="button">모두 읽음</button>' : ''}</div>`;
   return head + (R.length ? '<div class="bcl">' + R.map(cardA).join('') + '</div>' : empty);
@@ -692,7 +715,7 @@ function noticeCard(n) {
   const star = `<button class="star ${on ? 'on' : ''}" data-star="${esc(n.no)}" type="button">${on ? IC.star + '감시 중' : IC.starO + '감시'}</button>`;
   return `<div class="bc" style="cursor:default"><div class="row"><div>
     <div class="tags"><span class="tag t-blue">${({ Servc: '용역', Thng: '물품', Cnstwk: '공사' })[n.kind] || '입찰'}</span>${dd ? '<span class="tag t-violet">' + dd + '</span>' : ''}</div>
-    <h3>${esc(n.name)}</h3><div class="org">${esc(n.org)}${n.demand && n.demand !== n.org ? ' · ' + esc(n.demand) : ''}</div></div>${star}</div>
+    <h3>${nm(n.name)}</h3><div class="org">${esc(n.org)}${n.demand && n.demand !== n.org ? ' · ' + esc(n.demand) : ''}</div></div>${star}</div>
     <div class="grid3"><div><small>추정가격</small><b class="num">${won(n.price)}</b></div><div><small>입찰마감</small><b class="num">${mdhm(n.closeDt)}</b></div><div><small>개찰</small><b class="num">${mdhm(n.opengDt)}</b></div></div></div>`;
 }
 function renderSearch() {
@@ -727,9 +750,9 @@ function renderWatch() {
     <form class="sbox" data-addto="${k}" style="margin-top:10px"><input class="fld" style="margin:0;height:42px" placeholder="추가할 낱말" autocomplete="off"><button class="btn sm" style="height:42px" type="submit">추가</button></form></div>`;
   const wl = W.length ? W.map(w => `<div class="bc" style="cursor:default"><div class="row"><div>
       <div class="tags"><span class="tag ${statusCls(w.status)}">${esc(w.status || '대기')}</span>${w.status === '대기' && dday(w.opengDt) ? '<span class="tag t-violet">개찰 ' + dday(w.opengDt) + '</span>' : ''}</div>
-      <h3>${esc(w.name)}</h3><div class="org">${esc(w.demand || w.org)} · 개찰 ${mdhm(w.opengDt)}</div></div>
+      <h3>${nm(w.name)}</h3><div class="org">${esc(w.demand || w.org)} · 개찰 ${mdhm(w.opengDt)}</div></div>
       <button class="star on" data-star="${esc(w.no)}" type="button">${IC.star}해제</button></div></div>`).join('')
-    : '<div class="ak-empty">감시 중인 공고가 없어요.<br>검색 탭에서 별표를 눌러 추가하세요.</div>';
+    : '<div class="ak-empty">감시 중인 공고가 없어요. 검색 탭에서 별표를 눌러 추가하세요.</div>';
   return `<div class="sec">감시 중인 공고 <span class="n">${W.length}건</span></div><div class="bcl">${wl}</div>
     <div class="sec">조건으로 받기</div>
     ${chipList('keywords', '공고명 키워드', '공고명에 이 낱말이 하나라도 들어가면 알려요. 띄어쓰기는 무시해요.')}
@@ -749,7 +772,7 @@ function renderSet() {
       <input class="fld" id="cTok" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="연결 암호" value="${esc(S.conn?.token || '')}">
       <button class="btn wide ${S.demo ? '' : 'ghost'}" data-act="conn" type="button">${S.conn?.url ? '다시 연결' : '연결하기'}</button></div>`;
   const sw = (k, on) => `<label class="sw"><input type="checkbox" data-set="${k}" ${on ? 'checked' : ''}><i></i></label>`;
-  return (S.demo ? conn : '') + `<div class="card"><h2>확인 간격</h2><p class="sub">나라장터를 얼마나 자주 확인할지 정해요. 짧을수록 빨리 알지만 공공데이터 호출이 늘어요.</p>
+  return (S.demo ? conn : '') + `<div class="card"><h2>확인 간격</h2><p class="sub">나라장터를 얼마나 자주 확인할지 정해요. 누르면 바로 바뀌어요. 짧을수록 빨리 알지만 호출이 늘어요.</p>
       <div class="seg">${INTERVALS.map(([v, l]) => `<button type="button" class="${s.interval === v ? 'on' : ''}" data-iv="${v}">${l}</button>`).join('')}</div>
       <div class="line" style="margin-top:8px"><div class="lb">확인하는 시간<small>개찰은 주로 평일 낮에 해요</small></div>
         <select data-set="startHour">${hours(s.startHour)}</select><span>~</span><select data-set="endHour">${hours(s.endHour)}</select></div>
@@ -762,8 +785,9 @@ function renderSet() {
       <div class="line"><div class="lb">아이폰 위젯<small>홈 화면·잠금 화면에서 최근 개찰결과를 봐요</small></div><a class="btn sm ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="widget.html">설치 안내</a></div></div>
     <div class="card"><h2>우리 회사</h2><p class="sub">개찰 순위표에서 우리 회사를 찾아 순위를 알려 드려요.</p>
       <input class="fld" data-set="myName" type="text" placeholder="회사 이름 (예: 올포랜드)" value="${esc(s.myName || '')}">
-      <input class="fld" data-set="myBizno" type="text" inputmode="numeric" placeholder="사업자번호 (선택, 숫자만)" value="${esc(s.myBizno || '')}"></div>
-    <button class="btn wide" data-act="save" type="button">설정 저장</button>
+      <input class="fld" data-set="myBizno" type="text" inputmode="numeric" placeholder="사업자번호 (선택, 숫자만)" value="${esc(s.myBizno || '')}">
+      <button class="btn wide" data-act="save" type="button">회사 정보 저장</button></div>
+
     <div class="chips" style="justify-content:center;margin-top:12px"><button class="chip" data-act="test" type="button">시험 알림 보내기</button><button class="chip" data-act="checkNow" type="button">지금 확인하기</button></div>
     <div class="card" style="margin-top:14px"><h2>서버 상태</h2>
       <div class="line"><div class="lb">자동 확인</div><b class="${x.trigger ? 'ok' : 'bad'}">${x.trigger ? '켜짐' : '꺼짐'}</b></div>
@@ -773,14 +797,6 @@ function renderSet() {
     ${S.demo ? '' : conn}
     <p class="diag">${AppKit.env(BUILD)}</p>`;
 }
-function collectSettings() {
-  const s = Object.assign({}, S.d.settings);
-  document.querySelectorAll('#sc [data-set]').forEach(el => {
-    const k = el.dataset.set;
-    s[k] = el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? Number(el.value) : el.value.trim();
-  });
-  return s;
-}
 
 /* ───────── 상세 시트 ───────── */
 const sheet = AppKit.sheet('#sheet');
@@ -789,7 +805,7 @@ async function openDetail(key) {
   const box = document.getElementById('sheetBody');
   const draw = (bd, loading) => {
     box.innerHTML = `<div class="dt"><div class="tags" style="display:flex;gap:5px"><span class="tag ${statusCls(r.status)}">${esc(r.status)}</span><span class="tag">${esc(r.via || '')}</span></div>
-      <h2>${esc(r.name)}</h2><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
+      <h2>${nm(r.name)}</h2><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
       <dl class="facts"><dt>공고번호</dt><dd>${esc(r.no)}-${esc(r.ord || '000')}</dd><dt>개찰일시</dt><dd>${esc(r.opengDt)}</dd><dt>참가업체</dt><dd>${r.prtcpt || 0}개</dd>
         ${r.top ? `<dt>1순위</dt><dd>${esc(r.top.name)}</dd><dt>1순위 금액</dt><dd class="num">${wonFull(r.top.amount)} (${rate(r.top.rate)})</dd>` : ''}
         ${r.mine ? `<dt>우리 회사</dt><dd style="color:var(--mine-ink)">${r.mine.rank || '-'}위 · ${rate(r.mine.rate)}</dd>` : ''}</dl>
@@ -821,6 +837,16 @@ async function mutate(action, payload, msg) {
   try { const d = await api(action, payload); if (d && d.settings) setData(d); if (msg) AppKit.toast(msg); return d; }
   catch (e) { AppKit.toast(e.message || '처리하지 못했어요'); }
 }
+document.addEventListener('change', e => {
+  const el = e.target.closest('#sc [data-set]');
+  if (!el || el.type === 'text') return;
+  const v = el.type === 'checkbox' ? el.checked : Number(el.value);
+  if (el.dataset.set === 'endHour' || el.dataset.set === 'startHour') {
+    const st = Number(document.querySelector('[data-set=startHour]').value), en = Number(document.querySelector('[data-set=endHour]').value);
+    if (st >= en) return AppKit.toast('끝나는 시간은 시작보다 늦어야 해요');
+  }
+  mutate('saveSettings', { settings: { [el.dataset.set]: v } }, '저장했어요');
+});
 document.addEventListener('submit', async e => {
   e.preventDefault();
   if (e.target.id === 'sform') { document.activeElement?.blur(); return doSearch(); }
@@ -839,7 +865,7 @@ document.addEventListener('click', async e => {
   const st = t.closest('[data-star]');
   if (st) {
     const no = st.dataset.star;
-    if (isWatched(no)) { if (!AppKit.sure(st)) return; return mutate('unwatch', { no }, '감시를 해제했어요'); }
+    if (isWatched(no)) { if (!AppKit.sure(st, '해제할까요?')) return; return mutate('unwatch', { no }, '감시를 해제했어요'); }
     const item = (S.found?.items || []).find(n => n.no === no);
     return mutate('watch', { item }, '감시에 넣었어요. 개찰결과가 올라오면 알려 드릴게요');
   }
@@ -849,14 +875,22 @@ document.addEventListener('click', async e => {
   const kw = t.closest('[data-kwadd]');
   if (kw) { const s = Object.assign({}, S.d.settings); if ((s.keywords || []).includes(kw.dataset.kwadd)) return; s.keywords = [...(s.keywords || []), kw.dataset.kwadd]; await mutate('saveSettings', { settings: s }, '키워드로 받을게요'); return tabs.go('search', 0); }
   const rm = t.closest('[data-rm]');
-  if (rm) { if (!AppKit.sure(rm)) return; const s = Object.assign({}, S.d.settings); s[rm.dataset.rm] = (s[rm.dataset.rm] || []).filter(x => x !== rm.dataset.v); return mutate('saveSettings', { settings: s }, '뺐어요'); }
+  if (rm) { if (!AppKit.sure(rm, '뺄까요?')) return; const s = Object.assign({}, S.d.settings); s[rm.dataset.rm] = (s[rm.dataset.rm] || []).filter(x => x !== rm.dataset.v); return mutate('saveSettings', { settings: s }, '뺐어요'); }
   const iv = t.closest('[data-iv]');
-  if (iv) { document.querySelectorAll('[data-iv]').forEach(b => b.classList.toggle('on', b === iv)); S.d.settings = Object.assign({}, collectSettings(), { interval: +iv.dataset.iv }); return; }
+  if (iv) {
+    if (+iv.dataset.iv === S.d.settings.interval) return;
+    document.querySelectorAll('[data-iv]').forEach(b => b.classList.toggle('on', b === iv));
+    return mutate('saveSettings', { settings: { interval: +iv.dataset.iv } }, '이제 ' + iv.textContent + '마다 확인할게요');
+  }
   const a = t.closest('[data-act]')?.dataset.act;
   if (a === 'readAll') { S.d.results.forEach(r => r.read = true); setData(S.d); return api('read', { all: true }).catch(() => {}); }
   if (a === 'search') return doSearch();
-  if (a === 'save') return mutate('saveSettings', { settings: Object.assign(collectSettings(), { interval: S.d.settings.interval }) }, '저장했어요. 확인 간격도 바로 바뀌어요');
-  if (a === 'test') return mutate('test', {}, '시험 알림을 보냈어요. 메일·텔레그램을 확인해 보세요');
+  if (a === 'save') return mutate('saveSettings', { settings: { myName: document.querySelector('[data-set=myName]').value.trim(), myBizno: document.querySelector('[data-set=myBizno]').value.replace(/\D/g, '') } }, '회사 정보를 저장했어요');
+  if (a === 'test') {
+    const d = await mutate('test', {}); if (!d) return;
+    const t = d.sent || {}, ok = [t.mail && 'Gmail', t.tg && '텔레그램'].filter(Boolean);
+    return AppKit.toast(ok.length ? ok.join('·') + '으로 시험 알림을 보냈어요' + (t.tgErr ? ' (텔레그램은 실패: ' + t.tgErr + ')' : '') : '보내지 못했어요: ' + (t.tgErr || '알림 받을 곳이 꺼져 있어요'), 4000);
+  }
   if (a === 'checkNow') { const d = await mutate('checkNow', {}); if (d) AppKit.toast('확인했어요 · 새 결과 ' + (d.newCount || 0) + '건'); return; }
   if (a === 'conn') {
     const url = document.getElementById('cUrl').value.trim(), token = document.getElementById('cTok').value.trim();

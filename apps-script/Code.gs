@@ -64,7 +64,7 @@ function handle_(req) {
     if (a === 'saveSettings') { saveSettings_(req.settings || {}); return ok_(snapshot_()); }
     if (a === 'read') { markRead_(req.all ? null : req.keys || []); return ok_({ done: true }); }
     if (a === 'detail') return ok_(detail_(req.key, req.no, req.ord));
-    if (a === 'test') { testNotify(); return ok_(snapshot_()); }
+    if (a === 'test') { const sent = testNotify(); const sn = snapshot_(); sn.sent = sent; return ok_(sn); }
     if (a === 'checkNow') { const n = check_(true); const s = snapshot_(); s.newCount = n; return ok_(s); }
     return { ok: false, code: 'bad', message: '알 수 없는 요청이에요' };
   } catch (e) {
@@ -119,6 +119,7 @@ function saveSettings_(inp) {
   ['keywords', 'institutions', 'exclude'].forEach(k => { if (k in inp) s[k] = list(inp[k]); });
   if ('kinds' in inp) { const k = list(inp.kinds).filter(x => KIND_NM[x]); if (k.length) s.kinds = k; }
   ['myName', 'myBizno', 'email'].forEach(k => { if (k in inp) s[k] = String(inp[k] || '').trim().slice(0, 80); });
+  if (s.startHour >= s.endHour) { s.startHour = old.startHour; s.endHour = old.endHour; }
   P.setProperty('settings', JSON.stringify(s));
   // 확인 간격이 바뀌었거나 트리거가 없으면 다시 건다
   const has = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'check');
@@ -180,7 +181,9 @@ function addResult_(r) {
 }
 function markRead_(keys) {
   const sh = sheet_('결과'), rs = rows_(sh);
-  rs.forEach((r, i) => { if (r[8] !== 'Y' && (!keys || keys.indexOf(r[1]) >= 0)) sh.getRange(i + 2, 9).setValue('Y'); });
+  if (!rs.length) return;
+  const col = rs.map(r => [r[8] === 'Y' || !keys || keys.indexOf(r[1]) >= 0 ? 'Y' : r[8]]);
+  sh.getRange(2, 9, col.length, 1).setValues(col);
 }
 
 // ════════════════════════ 검색 (입찰공고) ════════════════════════
@@ -254,21 +257,22 @@ function check_(force) {
     const last = Number(P.getProperty('lastRun') || 0);
     const from = new Date(Math.max(last ? last - 10 * 60e3 : 0, now - 90 * 60e3));
     s.kinds.forEach(k => {
-      fetchAll_(SCRS + 'getOpengResultListInfo' + k, { inqryDiv: '1', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(now) }, 50, 6)
+      fetchAll_(SCRS + 'getOpengResultListInfo' + k, { inqryDiv: '1', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(now) }, 20, 15)
         .forEach(r => { const v = via_(r, s, W); if (v) add(r, v); });
     });
 
     // 2) 안전망: 감시 공고 중 개찰 시각이 지난 것 + 키워드 (30분마다)
     const lastSweep = Number(P.getProperty('lastSweep') || 0);
     if (force || now - lastSweep >= 30 * 60e3) {
-      W.filter(w => w.status === '대기' && (!w.opengDt || String(w.opengDt).replace(/\D/g, '').slice(0, 12) <= fmt_(now)))
+      const old = fmt_(new Date(now - 14 * 864e5));
+      W.filter(w => { const o = String(w.opengDt || '').replace(/\D/g, '').slice(0, 12); return w.status === '대기' && (!o || (o <= fmt_(now) && o >= old)); })
         .forEach(w => {
           fetchAll_(SCRS + 'getOpengResultListInfo' + (w.kind || 'Servc') + 'PPSSrch', { inqryDiv: '3', bidNtceNo: w.no }, 20, 1)
             .forEach(r => add(r, '감시 공고'));
         });
       const begin = new Date(now - 2 * 864e5);
       s.kinds.forEach(k => s.keywords.forEach(kw => {
-        fetchAll_(SCRS + 'getOpengResultListInfo' + k + 'PPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(begin), inqryEndDt: fmt_(now), bidNtceNm: kw }, 50, 2)
+        fetchAll_(SCRS + 'getOpengResultListInfo' + k + 'PPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(begin), inqryEndDt: fmt_(now), bidNtceNm: kw }, 20, 5)
           .forEach(r => { const v = via_(r, s, W); if (v) add(r, v); });
       }));
       P.setProperty('lastSweep', String(now.getTime()));
@@ -361,6 +365,7 @@ function detail_(key, no, ord) {
 // ════════════════════════ 알림 보내기 ════════════════════════
 
 function notify_(r, s) {
+  const sent = { mail: false, tg: false, tgErr: '' };
   const subject = '[' + r.status + '] ' + r.name
     + (r.top ? ' — 1순위 ' + r.top.name + ' (' + rate_(r.top.rate) + ')' : '')
     + (r.mine ? ' / 우리 ' + (r.mine.rank || '-') + '위' : '');
@@ -384,11 +389,14 @@ function notify_(r, s) {
       htmlBody: '<div style="font-family:sans-serif"><h3 style="color:#2b6ca3;margin:0 0 8px">' + esc_(r.name) + '</h3><p>'
         + lines.map(esc_).join('<br>') + '</p>' + table + '<p><a href="' + APP_URL + '">개찰알림 앱에서 보기</a></p></div>',
     });
+    sent.mail = true;
   }
   if (s.telegram) {
-    tg_(subject + '\n\n' + lines.join('\n') + (r.bidders.length ? '\n\n' + r.bidders.slice(0, 5).map(b =>
+    sent.tg = tg_(subject + '\n\n' + lines.join('\n') + (r.bidders.length ? '\n\n' + r.bidders.slice(0, 5).map(b =>
       (b.rank || '-') + '. ' + b.name + ' ' + rate_(b.rate) + (b.mine ? ' ◀ 우리' : '')).join('\n') : '') + '\n\n' + APP_URL);
+    if (!sent.tg) sent.tgErr = P.getProperty('TG_TOKEN') ? '봇에게 먼저 말을 걸고 testTelegram 을 실행해 보세요' : 'TG_TOKEN 이 없어요';
   }
+  return sent;
 }
 
 /** 텔레그램 (스크립트 속성 TG_TOKEN · TG_CHAT_ID). 채팅 번호가 없으면 봇에게 온 메시지에서 찾아 기억한다 */
@@ -558,11 +566,14 @@ function testNotify() {
   const now = new Date(), s = settings_();
   const items = fetchAll_(SCRS + 'getOpengResultListInfoServcPPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(new Date(now - 3 * 864e5)), inqryEndDt: fmt_(now) }, 10, 1);
   const raw = items.filter(x => x.progrsDivCdNm === '개찰완료')[0] || items[0];
-  if (!raw) throw new Error('최근 개찰결과가 없어 시험할 수 없어요. 평일 낮에 다시 해 주세요');
-  raw._via = '시험';
-  const r = buildResult_(raw, s);
-  r.name = '[시험] ' + r.name;
-  notify_(r, Object.assign({}, s, { mail: s.mail || !s.telegram }));
+  let r;
+  if (raw) { raw._via = '시험'; r = buildResult_(raw, s); r.name = '[시험] ' + r.name; }
+  else {
+    // 주말·연휴처럼 최근 개찰결과가 없으면 예시 내용으로 보낸다 (알림 경로만 확인)
+    r = { key: 'TEST', at: now_(), no: 'TEST', ord: '000', name: '[시험] 개찰알림 연결 확인', org: '개찰알림', demand: '', opengDt: now_(),
+      status: '시험', prtcpt: 0, via: '시험', top: null, mine: null, bidders: [] };
+  }
+  return notify_(r, Object.assign({}, s, { mail: s.mail || !s.telegram }));
 }
 
 /** 자동 확인 끄기 */
