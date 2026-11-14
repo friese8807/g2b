@@ -234,7 +234,6 @@ table.bd td.nm{word-break:keep-all;overflow-wrap:break-word}
 </style>
 </head>
 <body>
-<div class="ak-demo" id="demo" hidden>예시 데이터입니다 · 설정 탭에서 서버를 연결하세요</div>
 <div class="ak-boot"><div><img src="icon-180-v1.png" alt=""><p>불러오는 중…</p></div></div>
 
 <header class="ak-top">
@@ -526,7 +525,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794672723';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794672865';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -547,7 +546,6 @@ const S = {
   found: null, lastOk: null,
 };
 S.demo = !S.conn?.url || /(^#|&)demo/.test(location.hash);
-document.getElementById('demo').hidden = !S.demo;
 
 /* ───────── 예시 데이터 (서버 없이 화면 전체가 돌아가게) ───────── */
 const DEMO = (() => {
@@ -861,7 +859,7 @@ document.addEventListener('click', async e => {
   if (a === 'conn') {
     const url = document.getElementById('cUrl').value.trim(), token = document.getElementById('cTok').value.trim();
     if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)) return AppKit.toast('주소는 https://script.google.com/…/exec 모양이어야 해요');
-    S.conn = { url, token }; LS.set('conn', S.conn); LS.del('mode'); S.demo = false; document.getElementById('demo').hidden = true;
+    S.conn = { url, token }; LS.set('conn', S.conn); LS.del('mode'); S.demo = false;
     await refresh(); return;
   }
 });
