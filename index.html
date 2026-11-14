@@ -550,7 +550,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794677456';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794677910';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -745,9 +745,9 @@ function renderSearch() {
   else if (S.found?.error) list = `<div class="ak-empty">${esc(S.found.error)}<br><button data-act="search" type="button">다시 시도</button></div>`;
   else if (S.found) list = `<div class="sec">입찰공고 <span class="n">${S.found.items.length}건</span><span class="r">최근 ${q.days}일 공고</span></div>`
     + (S.found.items.length ? '<div class="bcl">' + S.found.items.map(noticeCard).join('') + '</div>'
-      : '<div class="ak-empty">찾은 공고가 없어요. 낱말을 줄이거나 기간을 늘려 보세요.</div>');
+      : '<div class="ak-empty">찾은 공고가 없어요. 낱말을 줄이거나 기간을 늘려 보세요. 공고번호(예: R26BK01777014)로도 찾을 수 있어요.' + (S.found.note ? '<br><small style="display:block;margin-top:10px;font-size:11.5px">' + esc(S.found.note) + '</small>' : '') + '</div>');
   else list = `<p class="note">사업명이나 기관 이름으로 나라장터 입찰공고를 찾아요.<br>별표를 누르면 그 사업의 개찰결과가 올라오는 즉시 알려 드려요.</p>`;
-  return `<form class="sbox" id="sform"><input id="qtext" type="search" enterkeyhint="search" placeholder="예: 해양 GIS, 국립해양조사원" value="${esc(q.text)}" autocomplete="off"><button class="btn" type="submit">검색</button></form>
+  return `<form class="sbox" id="sform"><input id="qtext" type="search" enterkeyhint="search" placeholder="사업명·기관·공고번호" value="${esc(q.text)}" autocomplete="off"><button class="btn" type="submit">검색</button></form>
     <div class="chips">${[7, 30, 90].map(n => `<button class="chip ${q.days === n ? 'on' : ''}" data-days="${n}" type="button">${n}일</button>`).join('')}
       <span style="width:6px"></span>${KINDS.map(([k, l]) => `<button class="chip ${q.kinds.includes(k) ? 'on' : ''}" data-kind="${k}" type="button">${l}</button>`).join('')}</div>
     ${q.text && S.found && !S.found.error && S.found !== 'busy' ? `<div class="kwbar"><span>‘${esc(q.text)}’ 이(가) 들어간 <b>모든 사업</b>의 개찰결과도 받을까요?</span><button class="btn sm ${kwOn ? 'ghost' : ''}" data-kwadd="${esc(q.text)}" type="button">${kwOn ? '받는 중' : '키워드로 받기'}</button></div>` : ''}

@@ -194,11 +194,19 @@ function search_(text, days, kinds) {
   text = String(text || '').trim();
   days = Math.max(1, Math.min(90, days));
   const now = new Date(), map = {};
+  TRACE = [];
   const add = r => {
     const n = mapNotice_(r); if (!n.no) return;
     const old = map[n.no];
     if (!old || String(n.ord) > String(old.ord)) map[n.no] = n;   // 같은 공고는 최신 차수만
   };
+  // 공고번호로 찾기 (예: R26BK01777014, R26BK01777014-000)
+  const noM = text.replace(/\s/g, '').match(/^([A-Za-z]\d{2}[A-Za-z]{2}\d{6,10}|\d{10,14})(-\d{3})?$/);
+  if (noM) {
+    kinds.forEach(k => bidCall_(k, { inqryDiv: '2', bidNtceNo: noM[1].toUpperCase() }, 10, 1, '').forEach(add));
+    const items = Object.keys(map).map(k => map[k]);
+    return { items: items, total: items.length, note: items.length ? '' : traceText_() };
+  }
   kinds.forEach(k => {
     // 기간이 길면 30일씩 나눠 부른다
     for (let end = now; end > now - days * 864e5; end = new Date(end - 30 * 864e5)) {
@@ -212,7 +220,15 @@ function search_(text, days, kinds) {
     }
   });
   const items = Object.keys(map).map(k => map[k]).sort((a, b) => String(b.postDt).localeCompare(String(a.postDt))).slice(0, 150);
-  return { items: items, total: items.length };
+  return { items: items, total: items.length, note: items.length ? '' : traceText_() };
+}
+
+/** 0건일 때 앱에 보여 줄 '서버가 실제로 받은 것' 요약 */
+let TRACE = [];
+function traceText_() {
+  const g = {};
+  TRACE.forEach(t => { const k = t.api; g[k] = g[k] || { n: 0, calls: 0, err: '' }; g[k].calls++; g[k].n += t.n; if (t.err) g[k].err = t.err; });
+  return '서버 조회 결과: ' + Object.keys(g).map(k => k + ' ' + g[k].calls + '번 ' + g[k].n + '건' + (g[k].err ? ' (오류: ' + g[k].err.slice(0, 60) + ')' : '')).join(' · ');
 }
 
 function mapNotice_(r) {
@@ -295,19 +311,52 @@ function inspectNotice(no) {
 }
 
 /** 입찰공고 PPSSrch 호출 — 새 이름(02) → 옛 이름 순서로 시도하고 되는 쪽을 기억 */
-function bidCall_(kind, params, rows, pages) {
+/** 입찰공고 호출 — 새 주소(02)와 옛 주소를 차례로. '오류'뿐 아니라 '0건'이어도 다음 주소를 시도한다
+ *  (개편 직후에는 한쪽이 정상 응답 + 0건을 줄 수 있다). 자료가 나온 쪽을 기억해 다음부터 먼저 쓴다.
+ *  op: 'PPSSrch'(검색 조건) 또는 ''(공고번호 조회) */
+function bidCall_(kind, params, rows, pages, op) {
+  op = op == null ? 'PPSSrch' : op;
   const pref = Number(P.getProperty('bidApi') || 0), order = [pref, 1 - pref];
-  let lastErr;
+  let lastErr = null, anyOk = false;
   for (let i = 0; i < order.length; i++) {
-    const api = BID_APIS[order[i]];
+    const api = BID_APIS[order[i]], label = api.suffix ? '새 주소(02)' : '옛 주소';
     try {
-      const items = fetchAll_(api.base + 'getBidPblancListInfo' + kind + 'PPSSrch' + api.suffix, params, rows, pages);
+      const items = fetchAll_(api.base + 'getBidPblancListInfo' + kind + op + api.suffix, params, rows, pages);
+      TRACE.push({ api: label, n: items.length });
+      anyOk = true;
+      if (!items.length) continue;
       if (order[i] !== pref) P.setProperty('bidApi', String(order[i]));
       items.forEach(x => { x._kind = kind; });
       return items;
-    } catch (e) { lastErr = e; if (/LIMITED|한도|SERVICE_KEY|등록되지/i.test(String(e.message))) throw e; }
+    } catch (e) {
+      lastErr = e; TRACE.push({ api: label, n: 0, err: String(e.message || e) });
+      if (/LIMITED|한도/i.test(String(e.message))) throw e;
+    }
   }
-  throw lastErr;
+  if (!anyOk && lastErr) throw lastErr;
+  return [];
+}
+
+/** 검색이 안 될 때 실행: 주소·조건별로 실제 응답을 실행 기록에 찍는다 (예: debugSearch('해양예보')) */
+function debugSearch(text) {
+  text = text || '해양예보';
+  const now = new Date(), from = new Date(now - 30 * 864e5);
+  const tries = [
+    ['이름 검색 · 게시일 기준(inqryDiv 1)', 'PPSSrch', { inqryDiv: '1', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(now), bidNtceNm: text }],
+    ['이름 검색 · 개찰일 기준(inqryDiv 2)', 'PPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(new Date(+now + 30 * 864e5)), bidNtceNm: text }],
+    ['기간만 (조건 없이)', 'PPSSrch', { inqryDiv: '1', inqryBgnDt: fmt_(new Date(now - 864e5)), inqryEndDt: fmt_(now) }],
+    ['공고번호 R26BK01777014', '', { inqryDiv: '2', bidNtceNo: 'R26BK01777014' }],
+  ];
+  BID_APIS.forEach(api => tries.forEach(([label, op, prm]) => {
+    const url = api.base + 'getBidPblancListInfoServc' + op + api.suffix;
+    try {
+      const body = call_(url, Object.assign({ numOfRows: 5, pageNo: 1 }, prm));
+      const it = body.items, items = Array.isArray(it) ? it : it && it.item ? [].concat(it.item) : [];
+      console.log('✓ ' + (api.suffix ? '새(02) ' : '옛 ') + label + ' → 전체 ' + (body.totalCount || 0) + '건 ' + items.slice(0, 3).map(x => '[' + x.bidNtceNo + '] ' + x.bidNtceNm).join(' / '));
+    } catch (e) {
+      console.log('✗ ' + (api.suffix ? '새(02) ' : '옛 ') + label + ' → ' + e.message);
+    }
+  }));
 }
 
 // ════════════════════════ 개찰결과 감시 ════════════════════════
