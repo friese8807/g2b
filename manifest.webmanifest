@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "개찰알림",
+  "short_name": "개찰알림",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ko",
+  "background_color": "#0f1720",
+  "theme_color": "#0f1720",
+  "icons": [
+    { "src": "icon-192-v1.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-v1.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable-v1.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

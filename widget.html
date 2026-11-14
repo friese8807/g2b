@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>개찰알림 위젯 설치</title>
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180-v1.png">
+<style>
+:root{--bg:#f3f5f8;--card:#fff;--ink:#1b1f27;--muted:#5d6675;--line:#dfe3ea;--acc:#2f68d8;--code:#eef1f6}
+@media (prefers-color-scheme:dark){:root{--bg:#10141b;--card:#1a202b;--ink:#eef2f7;--muted:#8b95a5;--line:#2a3140;--acc:#6c9cf5;--code:#0c1016}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,"Apple SD Gothic Neo",system-ui,sans-serif;
+ padding:max(16px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom))}
+main{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:22px;margin:4px 0 0} h2{font-size:16px;margin:0 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+ol{margin:0;padding-left:20px} li{margin:4px 0} p{margin:0} .muted{color:var(--muted);font-size:13px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:12px;line-height:1.5;overflow:auto;max-height:240px;margin:10px 0 0;white-space:pre-wrap;word-break:break-all}
+button,a.btn{display:block;width:100%;border:0;border-radius:12px;background:var(--acc);color:#fff;font-size:16px;font-weight:700;padding:13px;text-align:center;text-decoration:none;margin-top:10px}
+a.btn.sec{background:var(--code);color:var(--ink);border:1px solid var(--line)}
+</style></head><body><main>
+<h1>개찰알림 위젯 설치</h1>
+<p class="muted">아이폰 홈 화면·잠금 화면에서 바로 볼 수 있어요. 15~30분마다 저절로 새로 고쳐지고, 누르면 앱이 열려요.</p>
+
+<div class="card"><h2>1. Scriptable 앱 설치 (무료)</h2>
+<a class="btn sec" href="https://apps.apple.com/app/scriptable/id1405459188">앱스토어에서 Scriptable 받기</a></div>
+
+<div class="card"><h2>2. 코드 복사</h2>
+<button id="copy">코드 복사하기</button>
+<pre id="code">불러오는 중…</pre></div>
+
+<div class="card"><h2>3. Scriptable에 붙여 넣기</h2>
+<ol><li>Scriptable을 열고 오른쪽 위 <b>+</b> 를 눌러요.</li>
+<li>빈 화면을 길게 눌러 <b>붙여넣기</b> 해요.</li>
+<li>맨 위 이름을 눌러 <b>개찰알림</b> 로 바꾸고 <b>Done</b> 을 눌러요.</li></ol></div>
+
+<div class="card"><h2>4. 홈 화면에 위젯 추가</h2>
+<ol><li>홈 화면 빈 곳을 길게 누르고 <b>편집 → 위젯 추가</b> 를 눌러요.</li>
+<li><b>Scriptable</b> 을 찾아 원하는 크기를 골라요.</li>
+<li>추가된 위젯을 길게 눌러 <b>위젯 편집</b> → Script 에서 <b>개찰알림</b> 를 골라요.</li></ol>
+<p class="muted" style="margin-top:8px">잠금 화면: 잠금 화면을 길게 누르고 <b>사용자화</b> → 위젯 칸에서 Scriptable 을 추가해요.</p></div>
+</main>
+<script>
+// 로더는 같은 폴더의 widget-loader.txt 에서 읽는다 (.js 로 두면 브라우저가 내려받기도 해서 .txt 로 올린다)
+fetch("widget-loader.txt?t="+Date.now()).then(r=>r.text()).then(t=>{document.getElementById("code").textContent=t}).catch(()=>{document.getElementById("code").textContent="코드를 불러오지 못했어요. 새로 고쳐 주세요."});
+document.getElementById("copy").onclick=async e=>{const el=document.getElementById("code"),t=el.textContent;
+try{await navigator.clipboard.writeText(t)}catch(x){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand("copy")}
+e.target.textContent="복사했어요 ✓";setTimeout(()=>e.target.textContent="코드 복사하기",2000)};
+</script>
+</body></html>

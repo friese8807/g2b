@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>개찰알림</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="개찰알림">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#d6e9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16283a" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180-v1.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192-v1.png">
+<link rel="manifest" href="manifest.webmanifest?v=1">
+<style>
+/* ═══ app-kit.css — 모바일 웹앱 공통 (화면 채우기 · 로딩 · 스와이프 · 시트) ═══
+   색은 :root 의 토큰만 바꿔서 앱마다 맞춘다. --solid 는 탭바/하단 띠 색이며 html 배경과 같아야 한다. */
+:root{
+  --bg:#f3f5f8; --solid:#ffffff; --ink:#12151c; --muted:#6b7280; --line:rgba(18,21,28,.10);
+  --accent:#3b6cf6; --danger:#e5484d;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#10141b; --solid:#171c25; --ink:#f2f4f8; --muted:#9aa3b2; --line:rgba(255,255,255,.12); color-scheme:dark; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+/* ── 1. 화면 채우기 (위아래 공백 제거) ──
+   · html 배경 = 하단 띠 색(--solid): 아이폰이 그리지 않는 맨 아래 칸이 탭바와 이어져 보인다.
+   · 문서는 스크롤하지 않고(#sc 만 스크롤) 탭바는 fixed 가 아닌 flex 맨 아래 칸에 둔다.
+   · --app-h 는 app-kit.js 의 fixViewport() 가 실제 화면 높이로 넣어 준다. */
+html{height:100%;background:var(--solid);overflow:hidden}
+body{margin:0;height:var(--app-h,100%);overflow:hidden;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--ink);overscroll-behavior:none;-webkit-text-size-adjust:100%;
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+.ak-top{flex:none;display:flex;align-items:center;gap:8px;background:var(--bg);
+  padding:calc(8px + var(--sat)) max(16px,var(--sar)) 8px max(16px,var(--sal))}
+.ak-top h1{flex:1;margin:0;font-size:20px;font-weight:800}
+#sc{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;
+  padding:4px max(16px,var(--sar)) 20px max(16px,var(--sal))}
+.ak-tabs{flex:none;display:flex;background:var(--solid);border-top:1px solid var(--line);
+  padding:6px max(8px,var(--sar)) max(6px,calc(var(--sab) - 14px)) max(8px,var(--sal))}
+.ak-tabs button{flex:1;border:0;background:none;font:inherit;font-size:11px;font-weight:600;color:var(--muted);
+  padding:6px 0;display:grid;gap:2px;justify-items:center;cursor:pointer}
+.ak-tabs button .i{font-size:20px;line-height:1}
+.ak-tabs button.on{color:var(--accent)}
+/* 아이폰은 16px 보다 작은 입력칸을 누르면 화면을 확대한다 */
+input,select,textarea{font-size:16px}
+button{touch-action:manipulation}
+
+/* ── 2. 로딩 ── */
+/* 2-1 첫 화면: JS 가 뜨기 전부터 보이는 아이콘 + 문구 */
+.ak-boot{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:var(--bg);text-align:center;transition:opacity .25s}
+.ak-boot.out{opacity:0;pointer-events:none}
+.ak-boot img{width:84px;height:84px;border-radius:20px;animation:ak-breathe 1.6s ease-in-out infinite}
+.ak-boot p{margin:14px 0 0;color:var(--muted);font-size:14px}
+@keyframes ak-breathe{50%{transform:scale(.94);opacity:.75}}
+/* 2-2 누른 동작 처리 중: 위쪽 진행 막대 + 알약 + 누른 버튼 스피너 */
+.ak-bar{position:fixed;left:0;right:0;top:0;height:3px;z-index:60;pointer-events:none;opacity:0;transition:opacity .2s;overflow:hidden;
+  background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.ak-bar.on{opacity:1}
+.ak-bar::before{content:"";position:absolute;top:0;bottom:0;width:40%;left:-40%;border-radius:3px;background:var(--accent);animation:ak-bar 1.1s ease-in-out infinite}
+@keyframes ak-bar{to{left:100%}}
+.ak-pill,.ak-toast{position:fixed;left:50%;bottom:calc(84px + var(--sab));z-index:61;transform:translate(-50%,12px);opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;background:var(--ink);color:var(--bg);font-size:13.5px;font-weight:600;
+  padding:9px 16px;border-radius:999px;white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden;text-overflow:ellipsis;
+  box-shadow:0 6px 24px rgba(0,0,0,.22)}
+.ak-pill{display:flex;align-items:center;gap:8px}
+.ak-pill.on,.ak-toast.on{opacity:1;transform:translate(-50%,0)}
+.ak-pill.top{top:calc(14px + var(--sat));bottom:auto}
+.ak-pill .e{display:inline-block;animation:ak-hop .5s ease-in-out infinite alternate}
+@keyframes ak-hop{from{transform:translateY(0) rotate(-6deg)}to{transform:translateY(-4px) rotate(6deg)}}
+.ak-pill .d i{display:inline-block;width:4px;height:4px;margin-left:3px;border-radius:50%;background:currentColor;animation:ak-dot 1.2s infinite}
+.ak-pill .d i:nth-child(2){animation-delay:.2s}.ak-pill .d i:nth-child(3){animation-delay:.4s}
+@keyframes ak-dot{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.is-busy{position:relative;pointer-events:none;opacity:.6}
+.is-busy::after{content:"";position:absolute;right:12px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;
+  border:2px solid currentColor;border-right-color:transparent;animation:ak-spin .7s linear infinite}
+/* 2-3 배경 새로고침: 새로고침 아이콘만 돈다 */
+.ak-icon-btn{border:0;background:none;color:inherit;font-size:20px;width:40px;height:40px;border-radius:50%;cursor:pointer}
+.ak-spin{animation:ak-spin .8s linear infinite}
+@keyframes ak-spin{to{transform:rotate(360deg)}}
+
+/* ── 3. 스와이프 ── */
+.ak-in-l{animation:ak-in-l .22s ease-out}.ak-in-r{animation:ak-in-r .22s ease-out}
+@keyframes ak-in-l{from{transform:translateX(28px);opacity:0}}
+@keyframes ak-in-r{from{transform:translateX(-28px);opacity:0}}
+.ak-hscroll{overflow-x:auto;scrollbar-width:none;touch-action:pan-x;overscroll-behavior:contain}
+.ak-hscroll::-webkit-scrollbar{display:none}
+
+/* ── 4. 바텀시트 (끌어서 열고 닫기) ── */
+.ak-scrim{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .25s}
+.ak-scrim.on{opacity:1;pointer-events:auto}
+.ak-sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;max-height:88%;max-width:560px;margin:0 auto;display:flex;flex-direction:column;
+  background:var(--solid);border-radius:22px 22px 0 0;transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1);
+  padding:0 max(18px,var(--sar)) calc(18px + var(--sab)) max(18px,var(--sal))}
+.ak-sheet.on{transform:translateY(0)}
+.ak-sheet.dragging{transition:none}
+/* 시트 아래로 같은 색을 이어 붙여 아이폰 하단 틈을 가린다 */
+.ak-sheet::after{content:"";position:absolute;left:0;right:0;top:calc(100% - 1px);height:200px;background:var(--solid)}
+.ak-grab{flex:none;padding:8px 0 12px;touch-action:none;cursor:grab}
+.ak-grab::before{content:"";display:block;width:40px;height:5px;border-radius:9px;margin:0 auto;background:color-mix(in srgb,var(--ink) 18%,transparent)}
+.ak-sheet .body{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+
+@media (prefers-reduced-motion:reduce){
+  .ak-bar::before,.ak-pill .e,.ak-pill .d i,.is-busy::after,.ak-spin,.ak-boot img{animation-duration:2.5s}
+  .ak-in-l,.ak-in-r{animation:none}.ak-sheet,.ak-scrim{transition:none}
+}
+
+/* ── 5. 상태·오류·예시 표시 ── */
+/* 숫자는 자릿수가 흔들리지 않게 */
+.num{font-variant-numeric:tabular-nums}
+/* 갱신 상태: <span class="ak-status"><i class="ak-dot live"></i>14:32 갱신</span> */
+.ak-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.ak-dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.ak-dot.live{background:#22c55e;animation:ak-pulse 1.8s infinite}
+.ak-dot.off{background:var(--danger)}
+@keyframes ak-pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}70%{box-shadow:0 0 0 6px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+/* 예시 데이터로 보는 중 */
+.ak-demo{flex:none;background:var(--ink);color:var(--bg);text-align:center;font-size:12.5px;padding:calc(6px + var(--sat)) 6px 6px}
+.ak-demo:not([hidden]) + .ak-top{padding-top:8px}
+/* 앱 오류 */
+.ak-err{flex:none;background:var(--danger);color:#fff;font-size:12.5px;line-height:1.4;padding:calc(6px + var(--sat)) 12px 6px;overflow-wrap:anywhere}
+/* 빈 화면·불러오기 실패 */
+.ak-empty{text-align:center;color:var(--muted);font-size:14px;line-height:1.6;padding:36px 16px}
+/* 설명 글은 가운데 정렬 + 낱말 중간에서 끊지 않기(한글 기본값은 글자 단위로 끊긴다) + 줄 길이 고르게.
+   칸보다 긴 낱말(주소·코드)만 그 안에서 끊는다. 손으로 <br>을 넣어 맞추지 않는다 */
+.ak-center,.note,.ak-empty,.ak-demo{word-break:keep-all;overflow-wrap:break-word;text-wrap:balance}
+.ak-center,.note{text-align:center}
+.ak-empty button{margin-top:12px;border:1px solid var(--line);background:var(--solid);color:var(--ink);font:inherit;font-weight:600;border-radius:10px;padding:8px 16px}
+/* 선 아이콘: <svg class="ak-ic" viewBox="0 0 24 24"><path …/></svg> — 글자색을 따라간다 */
+.ak-ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+@media (prefers-reduced-motion:reduce){.ak-dot.live{animation:none}}
+/* ── 이 앱의 색: 파스텔 하늘 (올포오션과 같은 계열) ── */
+:root{ --bg:#f3f8fc; --solid:#ffffff; --accent:#4f93c9; --on-accent:#fff; --top-bg:#d6e9f7; --top-ink:#1f4d70; --chip:#e9f2fa; --title:#2b6ca3;
+  --box:#f4f7fa;
+  --p-go:#dff3e6; --p-go-ink:#1d6b3c; --p-warn:#fdf0d5; --p-warn-ink:#8a5a00; --p-stop:#fde2e2; --p-stop-ink:#a12b2b;
+  --p-blue:#e1eefb; --p-blue-ink:#235a8c; --p-violet:#ece6fb; --p-violet-ink:#5b3fa6; --mine:#fff4c2; --mine-ink:#6b4e00; }
+@media (prefers-color-scheme:dark){ :root{ --bg:#0f1720; --solid:#152030; --accent:#8fc1ea; --on-accent:#0d2436; --top-bg:#16283a; --top-ink:#cfe5f7;
+  --chip:#1c2d40; --title:#9ccbf0; --box:#1a2636;
+  --p-go:#173528; --p-go-ink:#8fe0ae; --p-warn:#3a2e14; --p-warn-ink:#f5cf7a; --p-stop:#3d1d1f; --p-stop-ink:#ffb1b1;
+  --p-blue:#18304a; --p-blue-ink:#a9d0f5; --p-violet:#2a2345; --p-violet-ink:#c9b8ff; --mine:#3b3412; --mine-ink:#ffe48a; } }
+.ak-top{background:var(--top-bg);color:var(--top-ink)}
+.ak-top .ak-status{color:var(--top-ink);opacity:.85}
+.ak-tabs button{position:relative}
+.badge{position:absolute;top:-4px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:#e5484d;color:#fff;font-size:10.5px;font-weight:800;line-height:17px;font-style:normal}
+#sc{padding-top:12px}
+.sec{display:flex;align-items:center;gap:8px;margin:18px 2px 8px;font-size:14px;font-weight:800}
+.sec:first-child{margin-top:2px}
+.sec::before{content:"";width:4px;height:15px;border-radius:2px;background:var(--accent)}
+.sec .n{color:var(--muted);font-weight:600;font-size:12.5px}
+.sec .r{margin-left:auto;font-weight:600;font-size:12.5px;color:var(--muted)}
+
+/* 꼬리표 */
+.tag{display:inline-flex;align-items:center;height:21px;padding:0 8px;border-radius:6px;font-size:11.5px;font-weight:700;white-space:nowrap;background:var(--chip);color:var(--top-ink)}
+.t-go{background:var(--p-go);color:var(--p-go-ink)}.t-warn{background:var(--p-warn);color:var(--p-warn-ink)}
+.t-stop{background:var(--p-stop);color:var(--p-stop-ink)}.t-violet{background:var(--p-violet);color:var(--p-violet-ink)}
+.t-blue{background:var(--p-blue);color:var(--p-blue-ink)}.t-new{background:#e5484d;color:#fff}
+.t-dash{background:none;border:1px dashed var(--line);color:var(--muted)}
+
+/* 카드 (A안 기본) */
+.bcl{display:grid;gap:10px}
+.bc{background:var(--solid);border:1px solid var(--line);border-radius:16px;padding:13px 14px;cursor:pointer}
+.bc .tags{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:7px}
+.bc .tags .tm{margin-left:auto;font-size:11.5px;color:var(--muted)}
+.bc h3{margin:0;font-size:15.5px;line-height:1.38;color:var(--title);font-weight:700;word-break:keep-all;overflow-wrap:break-word}
+.bc .org{margin-top:4px;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.grid3>div{background:var(--box);border-radius:10px;padding:7px 8px;min-width:0}
+.grid3 small{display:block;font-size:10.5px;color:var(--muted);margin-bottom:2px}
+.grid3 b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid3 .mine{background:var(--mine);color:var(--mine-ink)}
+.grid3 .mine small{color:inherit;opacity:.8}
+
+/* 검색 */
+.sbox{display:flex;gap:8px}
+.sbox input{flex:1;min-width:0;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--solid);color:var(--ink);padding:0 14px;font:inherit;font-size:16px}
+.btn{border:0;border-radius:12px;background:var(--accent);color:var(--on-accent);font:inherit;font-weight:700;padding:0 16px;height:46px;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:var(--solid);color:var(--ink);border:1px solid var(--line)}
+.btn.wide{width:100%;margin-top:10px}
+.btn.sm{height:36px;padding:0 12px;font-size:13.5px;border-radius:10px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{border:1px solid var(--line);background:var(--solid);color:var(--ink);font:inherit;font-size:13px;font-weight:600;border-radius:999px;height:32px;padding:0 12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.chip .x{opacity:.6;font-weight:800}
+.star{flex:none;border:1px solid var(--line);background:var(--solid);color:var(--muted);border-radius:10px;height:34px;padding:0 10px;font:inherit;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.star.on{background:var(--mine);border-color:transparent;color:var(--mine-ink)}
+.star svg{width:15px;height:15px}
+.kwbar{display:flex;align-items:center;gap:10px;background:var(--chip);border-radius:14px;padding:10px 12px;margin:12px 0 4px;font-size:13px;color:var(--top-ink)}
+.kwbar span{flex:1;word-break:keep-all}
+.bc .row{display:flex;align-items:flex-start;gap:10px}
+.bc .row>div{flex:1;min-width:0}
+
+/* 설정 */
+.card{background:var(--solid);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.card h2{margin:0 0 4px;font-size:15px}
+.card .sub{margin:0 0 10px;font-size:12.5px;color:var(--muted);line-height:1.5;word-break:keep-all}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--box);border-radius:12px;padding:3px;gap:3px}
+.seg button{border:0;background:none;color:var(--ink);font:inherit;font-size:13.5px;font-weight:700;height:38px;border-radius:9px;cursor:pointer}
+.seg button.on{background:var(--solid);color:var(--title);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.line{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.line:first-of-type{border-top:0}
+.line .lb{flex:1;min-width:0;font-size:14px;font-weight:600}
+.line .lb small{display:block;font-weight:400;font-size:12px;color:var(--muted);margin-top:2px;word-break:keep-all}
+.line input[type=text],.line input[type=email],.line select,.fld{height:40px;border-radius:10px;border:1px solid var(--line);background:var(--box);color:var(--ink);padding:0 10px;font:inherit;font-size:16px;min-width:0}
+.fld{width:100%;margin-top:6px}
+.sw{position:relative;flex:none;width:50px;height:30px}
+.sw input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;z-index:1}
+.sw i{position:absolute;inset:0;border-radius:15px;background:color-mix(in srgb,var(--ink) 18%,transparent);transition:.2s}
+.sw i::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.sw input:checked+i{background:var(--accent)}
+.sw input:checked+i::after{transform:translateX(20px)}
+.ok{color:var(--p-go-ink)}.bad{color:var(--p-stop-ink)}
+.diag{color:var(--muted);font-size:11px;line-height:1.5;margin-top:16px;text-align:center;word-break:keep-all}
+.note{font-size:12.5px;color:var(--muted);line-height:1.55;margin:10px 4px}
+
+/* 상세 시트 */
+.dt h2{margin:6px 0 4px;font-size:17px;line-height:1.38;color:var(--title);word-break:keep-all}
+.dt .org{font-size:13px;color:var(--muted)}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px;margin:12px 0;background:var(--box);border-radius:12px;padding:12px}
+.facts dt{color:var(--muted)}.facts dd{margin:0;font-weight:600;text-align:right}
+table.bd{width:100%;border-collapse:collapse;font-size:13px}
+table.bd th{font-size:11.5px;color:var(--muted);font-weight:600;text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+table.bd td{padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+table.bd td.r,table.bd th.r{text-align:right}
+table.bd tr.mine td{background:var(--mine);color:var(--mine-ink);font-weight:700}
+table.bd td.nm{word-break:keep-all;overflow-wrap:break-word}
+</style>
+</head>
+<body>
+<div class="ak-demo" id="demo" hidden>예시 데이터입니다 · 설정 탭에서 서버를 연결하세요</div>
+<div class="ak-boot"><div><img src="icon-180-v1.png" alt=""><p>불러오는 중…</p></div></div>
+
+<header class="ak-top">
+  <h1 id="ttl">개찰알림</h1>
+  <span class="ak-status"><i class="ak-dot" id="dot"></i><span id="st">불러오는 중…</span></span>
+  <button class="ak-icon-btn" id="refresh" type="button" aria-label="새로고침"><svg class="ak-ic" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</header>
+<main id="sc"></main>
+<nav class="ak-tabs" aria-label="메뉴">
+  <button type="button" data-tab="feed"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg><b class="badge" id="badge" hidden></b></span>알림</button>
+  <button type="button" data-tab="search"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>검색</button>
+  <button type="button" data-tab="watch"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg></span>감시</button>
+  <button type="button" data-tab="set"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>설정</button>
+</nav>
+
+<div class="ak-sheet" id="sheet"><div class="ak-grab"></div><div class="body" id="sheetBody"></div></div>
+
+<script>
+/* ═══ app-kit.js — 모바일 웹앱 공통 동작 ═══
+   AppKit.fixViewport()            화면 높이 보정 (아이폰 홈 화면 앱 위아래 공백 제거)
+   AppKit.bootDone()               첫 로딩 화면 걷기
+   AppKit.track(promise, opts)     진행 막대 + 알약 + 누른 버튼 스피너
+   AppKit.wrap(fn, skip)           API 함수를 감싸 "방금 누른 동작"만 자동으로 진행 표시
+   AppKit.spin(el, promise)        새로고침 아이콘 돌리기 (배경 새로고침용)
+   AppKit.toast(msg)               짧은 알림
+   AppKit.swipe(el, {onNext,onPrev})  좌우 스와이프 (탭·날짜 넘기기)
+   AppKit.tabs({...})              탭바 + 스와이프 + 넘김 애니메이션
+   AppKit.sheet(el)                바텀시트 열기/닫기 + 끌어내려 닫기
+   AppKit.autoUpdate(build)        version.txt 가 바뀌면 새 버전으로 다시 열기
+   AppKit.env()                    진단 문구 (버전·홈 화면 앱 여부·화면 크기)
+   AppKit.store('앱접두어')         localStorage 를 안전하게 (get/set/del)
+   AppKit.esc / num / krw / signed / kstDate / addDays / hhmm   글자·숫자·날짜
+   AppKit.poll(fn, ms, busy)       화면이 보일 때만 자동 새로고침 + 돌아오면 즉시
+   AppKit.editing(view)            입력 중인지 (배경 새로고침이 입력값을 지우지 않게)
+   AppKit.sequence()               늦게 온 예전 응답 버리기
+   AppKit.showErrors(build)        앱 오류를 화면에 표시
+   AppKit.sure(btn)                두 번 눌러야 지워지는 버튼
+   AppKit.copy(text) / buzz()      복사 · 진동
+   AppKit.toJpeg(file, maxSide)    사진 줄여서 올리기
+   AppKit.device()                 접속 기록용 기기·방식 */
+const AppKit = (() => {
+  const $ = s => typeof s === 'string' ? document.querySelector(s) : s;
+  const root = document.documentElement;
+  const standalone = () => !!navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+
+  /* ── 1. 화면 높이 ──
+     아이폰 홈 화면 앱은 웹 화면(innerHeight)을 실제 화면보다 짧게 잡을 때가 있다.
+     그 차이(gap)만큼 문서 높이를 늘려 맨 아래 빈 띠를 없앤다. 가로 모드·브라우저에서는 보정하지 않는다. */
+  let gap = 0;
+  function fixViewport() {
+    const set = () => {
+      const portraitH = Math.max(screen.height, screen.width);
+      const raw = innerHeight < innerWidth ? 0 : portraitH - innerHeight;
+      gap = standalone() && raw > 0 && raw < 160 ? raw : 0;
+      root.style.setProperty('--app-h', (innerHeight + gap) + 'px');
+      root.classList.toggle('standalone', standalone());
+    };
+    set();
+    addEventListener('resize', set);
+    addEventListener('orientationchange', () => setTimeout(set, 300));
+  }
+
+  /* ── 2. 로딩 ── */
+  function bootDone() { const b = $('.ak-boot'); if (!b) return; b.classList.add('out'); setTimeout(() => b.remove(), 300); }
+
+  let tapAt = 0, tapEl = null, busyN = 0, pillTm = 0, busyLabel = '잠깐만요, 처리 중이에요', busyEmoji = '⏳';
+  ['pointerdown', 'change'].forEach(t => document.addEventListener(t, e => {
+    tapAt = Date.now();
+    if (t === 'pointerdown') tapEl = e.target.closest?.('button,label,.btn,[role=button]') || null;
+  }, true));
+  function busyUI(on, label) {
+    let bar = $('.ak-bar'), pill = $('.ak-pill');
+    if (on) {
+      if (!bar) { bar = document.createElement('div'); bar.className = 'ak-bar'; document.body.appendChild(bar); }
+      if (!pill) { pill = document.createElement('div'); pill.className = 'ak-pill'; pill.setAttribute('role', 'status'); document.body.appendChild(pill); }
+      pill.innerHTML = `<span class="e">${busyEmoji}</span><span></span><span class="d"><i></i><i></i><i></i></span>`;
+      pill.children[1].textContent = label || busyLabel;
+      pill.classList.toggle('top', !!$('.ak-sheet.on'));           // 시트가 열려 있으면 버튼을 가리지 않게 위로
+      requestAnimationFrame(() => bar.classList.add('on'));
+      clearTimeout(pillTm); pillTm = setTimeout(() => pill.classList.add('on'), 350);   // 금방 끝나면 알약은 안 띄움
+    } else {
+      clearTimeout(pillTm); bar?.classList.remove('on'); pill?.classList.remove('on');
+      document.querySelectorAll('.is-busy').forEach(x => x.classList.remove('is-busy'));
+    }
+  }
+  function track(p, { el, label } = {}) {
+    busyN++; const b = $(el) || tapEl; if (b && document.contains(b)) b.classList.add('is-busy'); busyUI(true, label);
+    const done = () => { if (--busyN <= 0) { busyN = 0; busyUI(false); } };
+    p.then(done, done); return p;
+  }
+  /* 사용자가 누른 지 1.5초 안에 시작된 요청만 표시한다. 배경 새로고침은 조용히. */
+  function wrap(fn, skip) {
+    return function (...a) {
+      const p = fn.apply(this, a);
+      if (Date.now() - tapAt > 1500 || (skip && skip(...a))) return p;
+      return track(p);
+    };
+  }
+  function spin(el, p) { el = $(el); el?.classList.add('ak-spin'); const off = () => el?.classList.remove('ak-spin'); p.then(off, off); return p; }
+  function setBusy({ label, emoji } = {}) { if (label) busyLabel = label; if (emoji) busyEmoji = emoji; }
+
+  let toastTm = 0;
+  function toast(msg, ms = 2400) {
+    let t = $('.ak-toast');
+    if (!t) { t = document.createElement('div'); t.className = 'ak-toast'; t.setAttribute('role', 'status'); t.setAttribute('aria-live', 'polite'); document.body.appendChild(t); }
+    t.textContent = msg; requestAnimationFrame(() => t.classList.add('on'));
+    clearTimeout(toastTm); toastTm = setTimeout(() => t.classList.remove('on'), ms);
+  }
+
+  /* ── 3. 스와이프 ──
+     · 세로 스크롤과 헷갈리지 않게: 가로 이동이 세로의 1.5배 이상, 60px 이상, 0.7초 이내일 때만.
+     · 가로로 스크롤되는 영역·입력칸·지도·[data-noswipe] 안에서 시작하면 무시.
+     · 화면 왼쪽 끝 24px 에서 시작하면 무시 (사파리 뒤로 가기 동작과 겹침). */
+  function hScrollable(n, stop) {
+    for (; n && n !== stop && n.nodeType === 1; n = n.parentElement) {
+      if (n.matches('[data-noswipe],input,textarea,select,.ak-hscroll,.leaflet-container,canvas')) return true;
+      if (n.scrollWidth > n.clientWidth + 4 && /(auto|scroll)/.test(getComputedStyle(n).overflowX)) return true;
+    }
+    return false;
+  }
+  function swipe(el, { onNext, onPrev, min = 60 } = {}) {
+    el = $(el); let x0 = null, y0 = 0, t0 = 0;
+    el.addEventListener('touchstart', e => {
+      x0 = null; if (e.touches.length !== 1) return;
+      const t = e.touches[0]; if (t.clientX < 24 || hScrollable(e.target, el)) return;
+      x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
+    }, { passive: true });
+    el.addEventListener('touchend', e => {
+      if (x0 == null) return; const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
+      if (Math.abs(dx) < min || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - t0 > 700) return;
+      (dx < 0 ? onNext : onPrev)?.();
+    }, { passive: true });
+    el.addEventListener('touchcancel', () => { x0 = null; }, { passive: true });
+  }
+  /* 탭바(.ak-tabs button[data-tab]) + 내용(render) + 스와이프를 한 번에 연결 */
+  function tabs({ bar = '.ak-tabs', view = '#sc', ids, start, render, remember = 'ak-tab' }) {
+    bar = $(bar); view = $(view);
+    let cur = start || ids[0];
+    try { const s = localStorage.getItem(remember); if (remember && ids.includes(s)) cur = s; } catch (e) {}
+    function go(id, dir) {
+      if (!ids.includes(id)) return;
+      if (dir == null) dir = Math.sign(ids.indexOf(id) - ids.indexOf(cur));
+      cur = id; try { remember && localStorage.setItem(remember, id); } catch (e) {}
+      bar?.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === id));
+      render(id); view.scrollTop = 0;
+      view.classList.remove('ak-in-l', 'ak-in-r');
+      if (dir) { void view.offsetWidth; view.classList.add(dir > 0 ? 'ak-in-l' : 'ak-in-r'); }
+    }
+    bar?.addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); });
+    swipe(view, {
+      onNext: () => { const i = ids.indexOf(cur); if (i < ids.length - 1) go(ids[i + 1], 1); },
+      onPrev: () => { const i = ids.indexOf(cur); if (i > 0) go(ids[i - 1], -1); },
+    });
+    go(cur, 0);
+    return { go, get current() { return cur; } };
+  }
+
+  /* ── 4. 바텀시트 ── 손잡이(.ak-grab)를 끌어내리거나 바깥을 누르면 닫힌다 */
+  function sheet(el) {
+    el = $(el);
+    let scrim = el.previousElementSibling?.classList.contains('ak-scrim') ? el.previousElementSibling : null;
+    if (!scrim) { scrim = document.createElement('div'); scrim.className = 'ak-scrim'; el.before(scrim); }
+    const open = () => { el.style.transform = ''; el.classList.add('on'); scrim.classList.add('on'); };
+    const close = () => { el.style.transform = ''; el.classList.remove('on'); scrim.classList.remove('on'); };
+    scrim.addEventListener('click', close);
+    const g = el.querySelector('.ak-grab');
+    if (g) {
+      let y0 = null, moved = 0, t0 = 0;
+      g.addEventListener('pointerdown', e => { y0 = e.clientY; t0 = Date.now(); moved = 0; el.classList.add('dragging'); g.setPointerCapture(e.pointerId); });
+      g.addEventListener('pointermove', e => { if (y0 == null) return; moved = Math.max(0, e.clientY - y0); el.style.transform = `translateY(${moved}px)`; });
+      const up = () => {
+        if (y0 == null) return; y0 = null; el.classList.remove('dragging');
+        const v = moved / Math.max(1, Date.now() - t0);
+        if (moved > el.offsetHeight * .3 || v > .5) close(); else el.style.transform = '';
+      };
+      g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+    }
+    return { open, close, get isOpen() { return el.classList.contains('on'); } };
+  }
+
+  /* ── 5. 새 버전 자동 열기 ──
+     휴대폰이 예전 화면을 붙잡고 있을 때: version.txt 숫자가 이 페이지의 build 와 다르면 ?v=숫자 로 다시 연다.
+     같은 버전으로 두 번 되돌지 않게 sessionStorage 에 기록한다. */
+  function autoUpdate(build, url = 'version.txt') {
+    const chk = () => fetch(url + '?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text()).then(v => {
+      v = (v || '').trim(); if (!/^[0-9]+$/.test(v) || v === String(build)) return;
+      try { if (sessionStorage.getItem('ak-up') === v) return; sessionStorage.setItem('ak-up', v); } catch (e) {}
+      location.replace(location.pathname + '?v=' + v + location.hash);
+    }).catch(() => {});
+    chk(); document.addEventListener('visibilitychange', () => { if (!document.hidden) chk(); });
+  }
+
+  /* ── 6. 진단 ── 화면 문제를 볼 때 설정 화면 맨 아래에 작게 보여 준다 */
+  function env(build) {
+    const p = document.createElement('div');
+    p.style.cssText = 'position:fixed;top:env(safe-area-inset-top);height:env(safe-area-inset-bottom);visibility:hidden';
+    document.body.appendChild(p); const cs = getComputedStyle(p), st = cs.top, sb = cs.height; p.remove();
+    return `버전 ${build ?? '-'} · ${standalone() ? '홈 화면 앱' : '브라우저'} · 화면 ${screen.width}×${screen.height} · 웹뷰 ${innerWidth}×${innerHeight} · 안전영역 위 ${st} 아래 ${sb} · 보정 ${gap}px`;
+  }
+
+  /* ── 7. 저장·글자·숫자 ── */
+  /* 저장소: 앱마다 접두어를 붙이고(같은 github.io 주소를 여러 앱이 함께 쓴다), 막혀 있어도 앱이 죽지 않게 try 로 감싼다 */
+  function store(prefix) {
+    const k = n => prefix + '.' + n;
+    return {
+      get(n, d) { try { const v = localStorage.getItem(k(n)); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+      set(n, v) { try { localStorage.setItem(k(n), JSON.stringify(v)); } catch (e) {} },
+      del(n) { try { localStorage.removeItem(k(n)); } catch (e) {} },
+    };
+  }
+  /* 서버·사용자 글자를 innerHTML 에 넣을 때는 반드시 esc() */
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pad = n => String(n).padStart(2, '0');
+  const num = n => Math.round(n).toLocaleString('ko-KR');
+  const krw = n => (n < 0 ? '−' : '') + num(Math.abs(n)) + '원';
+  const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '') + num(Math.abs(n));
+  /* 날짜는 휴대폰 시간대와 상관없이 한국 시간 기준 YYYY-MM-DD */
+  const kstDate = (d = new Date()) => new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
+  const addDays = (s, n) => { const d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const hhmm = (d = new Date()) => pad(d.getHours()) + ':' + pad(d.getMinutes());
+
+  /* ── 8. 자동 새로고침 ──
+     화면이 보일 때만 ms 마다 fn 을 부르고, 다른 앱에 갔다 돌아오면 바로 한 번 부른다.
+     ms 를 함수로 주면 매번 간격을 다시 정한다(예: 장중 15초, 마감 뒤 2분). busy() 가 참이면 건너뛴다. */
+  function poll(fn, ms, busy) {
+    let tm = 0;
+    const next = () => { clearTimeout(tm); if (!document.hidden) tm = setTimeout(tick, typeof ms === 'function' ? ms() : ms); };
+    const tick = async () => { if (!document.hidden && !(busy && busy())) { try { await fn(); } catch (e) {} } next(); };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) clearTimeout(tm); else tick(); });
+    next();
+    return { now: tick, stop: () => clearTimeout(tm) };
+  }
+  /* 사용자가 입력 중이거나 저장 안 한 값이 있으면 참 → 배경 새로고침이 화면을 다시 그려 입력값을 지우지 않게 */
+  function editing(view = '#sc') {
+    const v = $(view); if (!v) return false; const a = document.activeElement;
+    if (a && v.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+    return [...v.querySelectorAll('input,textarea')].some(i =>
+      i.type === 'checkbox' || i.type === 'radio' ? i.checked !== i.defaultChecked : i.type !== 'file' && i.value !== i.defaultValue);
+  }
+  /* 늦게 온 예전 응답 버리기:  const mine = seq.next();  …await…  if (!seq.is(mine)) return; */
+  function sequence() { let n = 0; return { next: () => ++n, is: v => v === n }; }
+
+  /* ── 9. 오류·확인 ── */
+  /* 앱 오류를 화면에 보여 준다(사용자가 캡처해서 알려 줄 수 있게). 다른 주소 스크립트의 'Script error.'(줄 번호 없음)는 무시 */
+  function showErrors(build) {
+    addEventListener('error', e => {
+      if (!e.lineno) return;
+      let b = $('.ak-err'); if (!b) { b = document.createElement('div'); b.className = 'ak-err'; document.body.prepend(b); }
+      b.textContent = `앱 오류: ${e.message || '알 수 없음'} (줄 ${e.lineno}${build ? ' · 버전 ' + build : ''})`;
+    });
+  }
+  /* 지우기처럼 되돌릴 수 없는 버튼: 처음 누르면 글자가 "정말 삭제"로 바뀌고, 한 번 더 눌러야 참 */
+  function sure(btn, label = '정말 삭제') {
+    if (btn.dataset.sure) return true;
+    const old = btn.textContent; btn.dataset.sure = '1'; btn.textContent = label;
+    setTimeout(() => { if (document.contains(btn)) { delete btn.dataset.sure; btn.textContent = old; } }, 3000);
+    return false;
+  }
+  async function copy(text) {
+    try { await navigator.clipboard.writeText(text); toast('복사했어요'); }
+    catch (e) { toast(text, 5000); }
+  }
+  const buzz = (ms = 12) => { try { navigator.vibrate?.(ms); } catch (e) {} };
+
+  /* ── 10. 사진 줄이기 ── 올리기 전에 긴 변 maxSide 로 줄인 JPEG(data URL). Apps Script·시트에 큰 사진을 그대로 보내지 않는다 */
+  async function toJpeg(file, maxSide = 1100, quality = .82) {
+    let img; try { img = await createImageBitmap(file); } catch (e) {
+      img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
+    }
+    const w = img.width || img.naturalWidth, h = img.height || img.naturalHeight, s = Math.min(1, maxSide / Math.max(w, h));
+    const c = document.createElement('canvas'); c.width = Math.round(w * s); c.height = Math.round(h * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', quality);
+  }
+
+  /* ── 11. 접속 정보 ── 서버 접속 기록용: 어떤 기기에서 어떤 방식으로 열었는지 */
+  function device() {
+    const u = navigator.userAgent || ''; let dev = '기타';
+    if (/iPhone/.test(u)) dev = 'iPhone'; else if (/iPad/.test(u) || (/Macintosh/.test(u) && navigator.maxTouchPoints > 1)) dev = 'iPad';
+    else if (/Android/.test(u)) dev = 'Android'; else if (/Macintosh/.test(u)) dev = 'Mac'; else if (/Windows/.test(u)) dev = 'Windows';
+    const v = (u.match(/OS (\d+)[_.]/) || [])[1]; if (v && /iP/.test(dev)) dev += ' iOS ' + v;
+    let via = '브라우저';
+    try { if (new URLSearchParams(location.search).get('via') === 'widget') via = '위젯'; else if (standalone()) via = '홈화면 앱'; } catch (e) {}
+    return { dev, via };
+  }
+
+  return { fixViewport, bootDone, track, wrap, spin, setBusy, toast, swipe, tabs, sheet, autoUpdate, env, standalone,
+    store, esc, pad, num, krw, signed, kstDate, addDays, hhmm, poll, editing, sequence, showErrors, sure, copy, buzz, toJpeg, device };
+})();
+</script>
+<script>
+const BUILD = '1794670061';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+AppKit.fixViewport();
+AppKit.autoUpdate(BUILD);
+AppKit.showErrors(BUILD);
+const LS = AppKit.store('g2b-alert');
+const { esc } = AppKit;
+
+/* 한 번 누르는 설정 링크: …/#setup=base64({url, token}) → 저장하고 주소에서 지운다 */
+(() => {
+  const m = location.hash.match(/setup=([^&]+)/); if (!m) return;
+  try { const c = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); if (c.url) { LS.set('conn', { url: c.url, token: c.token || '' }); } } catch (e) {}
+  history.replaceState(null, '', location.pathname);
+})();
+const hashOpt = k => (location.hash.match(new RegExp('[#&]' + k + '=([^&]*)')) || [])[1];
+const S = {
+  conn: LS.get('conn', null),
+  d: LS.get('data', null),
+  q: LS.get('q', { text: '', days: 30, kinds: ['Servc'], mode: 'notice' }),
+  found: null, lastOk: null,
+};
+S.demo = !S.conn?.url || /(^#|&)demo/.test(location.hash);
+document.getElementById('demo').hidden = !S.demo;
+
+/* ───────── 예시 데이터 (서버 없이 화면 전체가 돌아가게) ───────── */
+const DEMO = (() => {
+  const t = AppKit.kstDate(), y = AppKit.addDays(t, -1), y2 = AppKit.addDays(t, -2);
+  const B = (rank, name, amount, rate, rmrk = '정상', mine = false) => ({ rank, name, amount, rate, rmrk, mine });
+  const results = [
+    { key: 'R26BK01234567|000', at: t + ' 11:07', no: 'R26BK01234567', ord: '000', name: '2026년 해양공간 통합정보시스템 고도화 사업', org: '해양수산부', demand: '해양수산부 해양공간정책과', opengDt: t + ' 11:00', status: '개찰완료', prtcpt: 9, via: '감시 공고', read: false,
+      top: { name: '(주)한국공간정보', amount: 1268400000, rate: 87.745 }, mine: { rank: 2, amount: 1271900000, rate: 87.987 },
+      bidders: [B(1, '(주)한국공간정보', 1268400000, 87.745), B(2, '(주)올포랜드', 1271900000, 87.987, '정상', true), B(3, '(주)바다엔지니어링', 1274050000, 88.136), B(4, '지오솔루션(주)', 1276300000, 88.291), B(5, '(주)씨엠아이에스', 1279900000, 88.540), B(6, '(주)해양정보기술', 1281000000, 88.617), B(7, '(주)공간인', 1285500000, 88.928), B(8, '(주)디지털맵스', 1290000000, 89.239), B(9, '(주)에코지아이에스', 0, 0, '적격점수 미달')] },
+    { key: 'R26BK01239001|000', at: t + ' 10:32', no: 'R26BK01239001', ord: '000', name: '연안침식 실태조사 GIS 데이터베이스 구축 용역', org: '조달청 부산지방조달청', demand: '부산광역시 해양농수산국', opengDt: t + ' 10:30', status: '개찰완료', prtcpt: 14, via: '키워드 GIS', read: false,
+      top: { name: '(주)바다엔지니어링', amount: 384120000, rate: 86.902 }, mine: null, bidders: [] },
+    { key: 'R26BK01229876|000', at: y + ' 16:04', no: 'R26BK01229876', ord: '000', name: '국가해양관측망 자료 품질관리 시스템 유지관리', org: '국립해양조사원', demand: '국립해양조사원', opengDt: y + ' 16:00', status: '유찰', prtcpt: 1, via: '기관 국립해양조사원', read: true, top: null, mine: null, bidders: [] },
+    { key: 'R26BK01220455|001', at: y + ' 14:11', no: 'R26BK01220455', ord: '001', name: '스마트 항만 디지털트윈 기반 안전관리 플랫폼 구축(재공고)', org: '해양수산부 부산지방해양수산청', demand: '부산지방해양수산청', opengDt: y + ' 14:00', status: '개찰완료', prtcpt: 6, via: '키워드 디지털트윈', read: true,
+      top: { name: '(주)올포랜드', amount: 2134500000, rate: 87.756 }, mine: { rank: 1, amount: 2134500000, rate: 87.756 }, bidders: [] },
+    { key: 'R26BK01218811|000', at: y2 + ' 11:20', no: 'R26BK01218811', ord: '000', name: '해양경찰 수색구조 지원 공간정보 서비스 개선', org: '해양경찰청', demand: '해양경찰청 수색구조과', opengDt: y2 + ' 11:00', status: '재입찰', prtcpt: 4, via: '키워드 공간정보', read: true, top: null, mine: null, bidders: [] },
+    { key: 'R26BK01217002|000', at: y2 + ' 10:05', no: 'R26BK01217002', ord: '000', name: '수치지도 2.0 갱신 및 정위치 편집(남해권역)', org: '국토지리정보원', demand: '국토지리정보원', opengDt: y2 + ' 10:00', status: '개찰완료', prtcpt: 22, via: '키워드 수치지도', read: true,
+      top: { name: '(주)디지털맵스', amount: 655300000, rate: 86.512 }, mine: { rank: 7, amount: 659800000, rate: 87.106 }, bidders: [] },
+  ];
+  const d1 = AppKit.addDays(t, 1), d3 = AppKit.addDays(t, 3), d6 = AppKit.addDays(t, 6);
+  const notices = [
+    { no: 'R26BK01250632', ord: '000', name: '해양 디지털트윈 기반 연안재해 예측 시스템 구축', org: '해양수산부', demand: '해양수산부 해양정책과', postDt: AppKit.addDays(t, -9) + ' 10:00', closeDt: d1 + ' 10:00', opengDt: d1 + ' 11:00', price: 1820000000, kind: 'Servc' },
+    { no: 'R26BK01251190', ord: '000', name: '2027년 국가 해양공간정보 DB 정비 용역', org: '국립해양조사원', demand: '국립해양조사원 해양정보과', postDt: AppKit.addDays(t, -6) + ' 09:00', closeDt: d3 + ' 10:00', opengDt: d3 + ' 11:00', price: 742000000, kind: 'Servc' },
+    { no: 'R26BK01252007', ord: '000', name: '연안 GIS 플랫폼 클라우드 전환 및 고도화', org: '조달청', demand: '인천광역시 해양항공국', postDt: AppKit.addDays(t, -3) + ' 14:00', closeDt: d6 + ' 10:00', opengDt: d6 + ' 11:00', price: 512500000, kind: 'Servc' },
+    { no: 'R26BK01253321', ord: '000', name: '해양레저 안전지도 서비스 운영 및 유지관리', org: '해양경찰청', demand: '해양경찰청 해양안전과', postDt: AppKit.addDays(t, -2) + ' 09:30', closeDt: AppKit.addDays(t, 8) + ' 10:00', opengDt: AppKit.addDays(t, 8) + ' 11:00', price: 298000000, kind: 'Servc' },
+    { no: 'R26BK01253990', ord: '000', name: '지하시설물 통합정보 GIS 정확도 개선 사업', org: '경기도 용인시', demand: '용인시 도로정책과', postDt: AppKit.addDays(t, -1) + ' 11:00', closeDt: AppKit.addDays(t, 10) + ' 10:00', opengDt: AppKit.addDays(t, 10) + ' 11:00', price: 386000000, kind: 'Servc' },
+  ];
+  return {
+    settings: { interval: 1, startHour: 8, endHour: 20, weekends: false, kinds: ['Servc'], keywords: ['GIS', '공간정보', '해양', '디지털트윈', '수치지도'], institutions: ['국립해양조사원'], exclude: ['청소'],
+      myName: '올포랜드', myBizno: '', mail: true, email: '', telegram: true, tgReady: false, widget: true },
+    watches: [Object.assign({}, notices[0], { status: '대기' }), Object.assign({}, notices[1], { status: '대기' }),
+      { no: 'R26BK01234567', ord: '000', name: '2026년 해양공간 통합정보시스템 고도화 사업', org: '해양수산부', demand: '해양수산부 해양공간정책과', opengDt: t + ' 11:00', price: 1445000000, kind: 'Servc', status: '개찰완료' }],
+    results, notices,
+    status: { lastRun: t + ' ' + AppKit.hhmm(), lastError: '', callsToday: 412, trigger: true, nextRun: '' },
+  };
+})();
+
+/* ───────── 서버 호출: fetch → 안 되면 JSONP (아이폰 홈 화면 앱 Load failed 대비) ───────── */
+function jsonp(url, params) {
+  return new Promise((ok, no) => {
+    const cb = 'cb' + Date.now() + Math.floor(Math.random() * 1e4), s = document.createElement('script');
+    const tm = setTimeout(() => { done(); no(new Error('응답이 없어요')); }, 30000);
+    const done = () => { clearTimeout(tm); delete window[cb]; s.remove(); };
+    window[cb] = j => { done(); ok(j); };
+    s.onerror = () => { done(); no(new Error('Load failed')); };
+    s.src = url + '?callback=' + cb + '&p=' + encodeURIComponent(JSON.stringify(params));
+    document.head.appendChild(s);
+  });
+}
+let api = async (action, payload = {}) => {
+  if (S.demo) return demoApi(action, payload);
+  const body = { action, token: S.conn.token, ...payload };
+  let j;
+  if (LS.get('mode', 'fetch') === 'fetch') {
+    try {
+      const r = await fetch(S.conn.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+      j = await r.json();
+    } catch (e) { j = null; }
+  }
+  if (!j) { j = await jsonp(S.conn.url, body); LS.set('mode', 'jsonp'); }
+  if (!j.ok) throw Object.assign(new Error(j.message || '처리하지 못했어요'), { code: j.code });
+  return j.data;
+};
+api = AppKit.wrap(api, a => a === 'load');
+
+async function demoApi(action, p) {
+  await new Promise(r => setTimeout(r, action === 'load' ? 200 : 600));
+  const d = S.d || DEMO;
+  if (action === 'load') return DEMO;
+  if (action === 'search') {
+    const q = (p.text || '').replace(/\s/g, '').toLowerCase();
+    return { items: DEMO.notices.filter(n => !q || (n.name + n.org + n.demand).replace(/\s/g, '').toLowerCase().includes(q)), total: DEMO.notices.length };
+  }
+  if (action === 'watch') { d.watches.unshift(Object.assign({}, p.item, { status: '대기' })); return d; }
+  if (action === 'unwatch') { d.watches = d.watches.filter(w => w.no !== p.no); return d; }
+  if (action === 'saveSettings') { d.settings = Object.assign(d.settings, p.settings); return d; }
+  if (action === 'read') { d.results.forEach(r => r.read = true); return d; }
+  if (action === 'detail') return (d.results.find(r => r.key === p.key) || {}).bidders || [];
+  return d;
+}
+
+/* ───────── 불러오기 ───────── */
+const seq = AppKit.sequence();
+async function refresh() {
+  const mine = seq.next();
+  try {
+    const d = await AppKit.spin('#refresh', api('load'));
+    if (!seq.is(mine)) return;
+    setData(d); S.lastOk = new Date();
+    document.getElementById('dot').className = 'ak-dot live';
+    document.getElementById('st').textContent = AppKit.hhmm(S.lastOk) + ' 갱신';
+  } catch (e) {
+    document.getElementById('dot').className = 'ak-dot off';
+    document.getElementById('st').textContent = S.lastOk ? AppKit.hhmm(S.lastOk) + ' 이후 연결 안 됨' : '연결 안 됨';
+    if (e.code === 'auth') AppKit.toast('연결 정보가 맞지 않아요. 설정에서 다시 연결해 주세요');
+    else AppKit.toast(/fetch|Load failed|응답/.test(e.message) ? '서버에 연결하지 못했어요. 잠시 후 다시 해주세요.' : e.message);
+  }
+}
+function setData(d, redraw = true) {
+  S.d = d; if (!S.demo) LS.set('data', d);
+  const n = (d.results || []).filter(r => !r.read).length, b = document.getElementById('badge');
+  b.hidden = !n; b.textContent = n > 99 ? '99+' : n;
+  if (redraw && !sheet.isOpen && !AppKit.editing()) tabs.go(tabs.current, 0);
+}
+
+/* ───────── 글자·숫자 도우미 ───────── */
+const won = n => { n = Number(n); if (!n) return '-'; if (n >= 1e8) return (n / 1e8).toFixed(n >= 1e10 ? 0 : 2).replace(/\.?0+$/, '') + '억'; if (n >= 1e4) return Math.round(n / 1e4).toLocaleString('ko-KR') + '만'; return n.toLocaleString('ko-KR'); };
+const wonFull = n => Number(n) ? Number(n).toLocaleString('ko-KR') + '원' : '-';
+const rate = v => { const n = Number(v); return n ? n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '%' : '-'; };
+const statusCls = s => ({ '개찰완료': 't-go', '유찰': 't-warn', '재입찰': 't-violet', '대기': 't-blue' }[s] || 't-blue');
+const dday = dt => {
+  if (!dt) return ''; const a = new Date(AppKit.kstDate() + 'T00:00:00Z'), b = new Date(String(dt).slice(0, 10) + 'T00:00:00Z');
+  const n = Math.round((b - a) / 864e5); return n === 0 ? '오늘' : n > 0 ? 'D-' + n : '';
+};
+const mdhm = dt => { const m = String(dt || '').match(/\d{4}-(\d\d)-(\d\d)[ T](\d\d:\d\d)/); return m ? +m[1] + '/' + +m[2] + ' ' + m[3] : esc(dt || ''); };
+const isWatched = no => (S.d?.watches || []).some(w => w.no === no);
+const IC = { star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+  starO: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>' };
+
+/* ───────── 알림 탭 ───────── */
+function cardA(r) {
+  return `<div class="bc" data-open="${esc(r.key)}">
+    <div class="tags"><span class="tag ${statusCls(r.status)}">${esc(r.status)}</span>${r.read ? '' : '<span class="tag t-new">NEW</span>'}<span class="tag">${esc(r.via || '')}</span><span class="tm">${mdhm(r.at)}</span></div>
+    <h3>${esc(r.name)}</h3><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
+    <div class="grid3">
+      <div><small>1순위</small><b>${r.top ? esc(r.top.name) : r.status === '유찰' ? '유찰' : '-'}</b></div>
+      <div><small>투찰률</small><b class="num">${r.top ? rate(r.top.rate) : '-'}</b></div>
+      <div class="${r.mine ? 'mine' : ''}"><small>${r.mine ? '우리 순위' : '참가업체'}</small><b class="num">${r.mine ? (r.mine.rank || '-') + '위' : (r.prtcpt || 0) + '개'}</b></div>
+    </div></div>`;
+}
+function renderFeed() {
+  const R = S.d?.results || [], W = S.d?.watches || [];
+  const empty = `<div class="ak-empty">아직 받은 개찰결과가 없어요.<br>검색 탭에서 사업을 찾아 감시에 넣거나, 감시 탭에 키워드를 넣어 두세요.</div>`;
+  const unread = R.filter(r => !r.read).length;
+  const head = `<div class="sec">받은 개찰결과 <span class="n">${R.length}건</span>${unread ? '<button class="r chip" data-act="readAll" type="button">모두 읽음</button>' : ''}</div>`;
+  return head + (R.length ? '<div class="bcl">' + R.map(cardA).join('') + '</div>' : empty);
+}
+
+/* ───────── 검색 탭 ───────── */
+const KINDS = [['Servc', '용역'], ['Thng', '물품'], ['Cnstwk', '공사']];
+function noticeCard(n) {
+  const on = isWatched(n.no), dd = dday(n.opengDt);
+  const star = `<button class="star ${on ? 'on' : ''}" data-star="${esc(n.no)}" type="button">${on ? IC.star + '감시 중' : IC.starO + '감시'}</button>`;
+  return `<div class="bc" style="cursor:default"><div class="row"><div>
+    <div class="tags"><span class="tag t-blue">${({ Servc: '용역', Thng: '물품', Cnstwk: '공사' })[n.kind] || '입찰'}</span>${dd ? '<span class="tag t-violet">' + dd + '</span>' : ''}</div>
+    <h3>${esc(n.name)}</h3><div class="org">${esc(n.org)}${n.demand && n.demand !== n.org ? ' · ' + esc(n.demand) : ''}</div></div>${star}</div>
+    <div class="grid3"><div><small>추정가격</small><b class="num">${won(n.price)}</b></div><div><small>입찰마감</small><b class="num">${mdhm(n.closeDt)}</b></div><div><small>개찰</small><b class="num">${mdhm(n.opengDt)}</b></div></div></div>`;
+}
+function renderSearch() {
+  const q = S.q, set = S.d?.settings || {};
+  const kwOn = q.text && (set.keywords || []).includes(q.text.trim());
+  let list = '';
+  if (S.found === 'busy') list = '<div class="ak-empty">찾는 중이에요…</div>';
+  else if (S.found?.error) list = `<div class="ak-empty">${esc(S.found.error)}<br><button data-act="search" type="button">다시 시도</button></div>`;
+  else if (S.found) list = `<div class="sec">입찰공고 <span class="n">${S.found.items.length}건</span><span class="r">최근 ${q.days}일 공고</span></div>`
+    + (S.found.items.length ? '<div class="bcl">' + S.found.items.map(noticeCard).join('') + '</div>'
+      : '<div class="ak-empty">찾은 공고가 없어요. 낱말을 줄이거나 기간을 늘려 보세요.</div>');
+  else list = `<p class="note">사업명이나 기관 이름으로 나라장터 입찰공고를 찾아요.<br>별표를 누르면 그 사업의 개찰결과가 올라오는 즉시 알려 드려요.</p>`;
+  return `<form class="sbox" id="sform"><input id="qtext" type="search" enterkeyhint="search" placeholder="예: 해양 GIS, 국립해양조사원" value="${esc(q.text)}" autocomplete="off"><button class="btn" type="submit">검색</button></form>
+    <div class="chips">${[7, 30, 90].map(n => `<button class="chip ${q.days === n ? 'on' : ''}" data-days="${n}" type="button">${n}일</button>`).join('')}
+      <span style="width:6px"></span>${KINDS.map(([k, l]) => `<button class="chip ${q.kinds.includes(k) ? 'on' : ''}" data-kind="${k}" type="button">${l}</button>`).join('')}</div>
+    ${q.text && S.found && !S.found.error && S.found !== 'busy' ? `<div class="kwbar"><span>‘${esc(q.text)}’ 이(가) 들어간 <b>모든 사업</b>의 개찰결과도 받을까요?</span><button class="btn sm ${kwOn ? 'ghost' : ''}" data-kwadd="${esc(q.text)}" type="button">${kwOn ? '받는 중' : '키워드로 받기'}</button></div>` : ''}
+    ${list}`;
+}
+async function doSearch() {
+  const el = document.getElementById('qtext'); if (el) S.q.text = el.value.trim();
+  LS.set('q', S.q); S.found = 'busy'; tabs.go('search', 0);
+  try { S.found = await api('search', { text: S.q.text, days: S.q.days, kinds: S.q.kinds }); }
+  catch (e) { S.found = { error: e.message || '찾지 못했어요' }; }
+  if (tabs.current === 'search') tabs.go('search', 0);
+}
+
+/* ───────── 감시 탭 ───────── */
+function renderWatch() {
+  const W = S.d?.watches || [], st = S.d?.settings || {};
+  const chipList = (k, label, ph) => `<div class="card"><h2>${label} <span style="color:var(--muted);font-weight:600;font-size:12.5px">${(st[k] || []).length}개</span></h2>
+    <p class="sub">${ph}</p><div class="chips" style="margin-top:0">${(st[k] || []).map(w => `<button class="chip" data-rm="${k}" data-v="${esc(w)}" type="button">${esc(w)} <span class="x">✕</span></button>`).join('')}</div>
+    <form class="sbox" data-addto="${k}" style="margin-top:10px"><input class="fld" style="margin:0;height:42px" placeholder="추가할 낱말" autocomplete="off"><button class="btn sm" style="height:42px" type="submit">추가</button></form></div>`;
+  const wl = W.length ? W.map(w => `<div class="bc" style="cursor:default"><div class="row"><div>
+      <div class="tags"><span class="tag ${statusCls(w.status)}">${esc(w.status || '대기')}</span>${w.status === '대기' && dday(w.opengDt) ? '<span class="tag t-violet">개찰 ' + dday(w.opengDt) + '</span>' : ''}</div>
+      <h3>${esc(w.name)}</h3><div class="org">${esc(w.demand || w.org)} · 개찰 ${mdhm(w.opengDt)}</div></div>
+      <button class="star on" data-star="${esc(w.no)}" type="button">${IC.star}해제</button></div></div>`).join('')
+    : '<div class="ak-empty">감시 중인 공고가 없어요.<br>검색 탭에서 별표를 눌러 추가하세요.</div>';
+  return `<div class="sec">감시 중인 공고 <span class="n">${W.length}건</span></div><div class="bcl">${wl}</div>
+    <div class="sec">조건으로 받기</div>
+    ${chipList('keywords', '공고명 키워드', '공고명에 이 낱말이 하나라도 들어가면 알려요. 띄어쓰기는 무시해요.')}
+    ${chipList('institutions', '기관', '공고기관·수요기관 이름에 들어가면 알려요. 예: 해양수산부, 해양경찰청')}
+    ${chipList('exclude', '제외할 낱말', '공고명에 이 낱말이 있으면 알리지 않아요. 예: 청소, 경비')}`;
+}
+
+/* ───────── 설정 탭 ───────── */
+const INTERVALS = [[1, '1분'], [5, '5분'], [10, '10분'], [15, '15분'], [30, '30분'], [60, '1시간']];
+function renderSet() {
+  const s = S.d?.settings || {}, x = S.d?.status || {};
+  const hours = (sel) => Array.from({ length: 25 }, (_, h) => `<option value="${h}" ${sel === h ? 'selected' : ''}>${h}시</option>`).join('');
+  const calls = Math.round(((s.endHour || 20) - (s.startHour || 8)) * 60 / (s.interval || 1));
+  const sw = (k, on) => `<label class="sw"><input type="checkbox" data-set="${k}" ${on ? 'checked' : ''}><i></i></label>`;
+  return `<div class="card"><h2>확인 간격</h2><p class="sub">나라장터를 얼마나 자주 확인할지 정해요. 짧을수록 빨리 알지만 공공데이터 호출이 늘어요.</p>
+      <div class="seg">${INTERVALS.map(([v, l]) => `<button type="button" class="${s.interval === v ? 'on' : ''}" data-iv="${v}">${l}</button>`).join('')}</div>
+      <div class="line" style="margin-top:8px"><div class="lb">확인하는 시간<small>개찰은 주로 평일 낮에 해요</small></div>
+        <select data-set="startHour">${hours(s.startHour)}</select><span>~</span><select data-set="endHour">${hours(s.endHour)}</select></div>
+      <div class="line"><div class="lb">주말·밤에도 확인<small>꺼 두면 평일 정해진 시간에만 확인해요</small></div>${sw('weekends', s.weekends)}</div>
+      <p class="note">예상 호출 하루 약 ${calls.toLocaleString('ko-KR')}회 · 개발계정 한도는 보통 하루 1,000회예요</p></div>
+    <div class="card"><h2>알림 받을 곳</h2>
+      <div class="line"><div class="lb">이 앱<small>알림 탭과 빨간 숫자로 보여 줘요</small></div><span class="tag t-go">항상</span></div>
+      <div class="line"><div class="lb">Gmail<small>${esc(s.email || '구글 계정 메일')}로 보내요. Gmail 앱 알림을 켜 두면 바로 울려요</small></div>${sw('mail', s.mail)}</div>
+      <div class="line"><div class="lb">텔레그램<small>${s.tgReady ? '<span class="ok">연결됨</span>' : '봇 연결이 필요해요 (README 안내)'}</small></div>${sw('telegram', s.telegram)}</div>
+      <div class="line"><div class="lb">아이폰 위젯<small>홈 화면·잠금 화면에서 최근 개찰결과를 봐요</small></div><a class="btn sm ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="widget.html">설치 안내</a></div></div>
+    <div class="card"><h2>우리 회사</h2><p class="sub">개찰 순위표에서 우리 회사를 찾아 순위를 알려 드려요.</p>
+      <input class="fld" data-set="myName" type="text" placeholder="회사 이름 (예: 올포랜드)" value="${esc(s.myName || '')}">
+      <input class="fld" data-set="myBizno" type="text" inputmode="numeric" placeholder="사업자번호 (선택, 숫자만)" value="${esc(s.myBizno || '')}"></div>
+    <button class="btn wide" data-act="save" type="button">설정 저장</button>
+    <div class="chips" style="justify-content:center;margin-top:12px"><button class="chip" data-act="test" type="button">시험 알림 보내기</button><button class="chip" data-act="checkNow" type="button">지금 확인하기</button></div>
+    <div class="card" style="margin-top:14px"><h2>서버 상태</h2>
+      <div class="line"><div class="lb">자동 확인</div><b class="${x.trigger ? 'ok' : 'bad'}">${x.trigger ? '켜짐' : '꺼짐'}</b></div>
+      <div class="line"><div class="lb">마지막 확인</div><span>${esc(x.lastRun || '-')}</span></div>
+      <div class="line"><div class="lb">오늘 호출</div><span class="num">${(x.callsToday || 0).toLocaleString('ko-KR')}회</span></div>
+      ${x.lastError ? `<div class="line"><div class="lb bad">최근 오류<small>${esc(x.lastError)}</small></div></div>` : ''}</div>
+    <div class="card"><h2>서버 연결</h2><p class="sub">Apps Script 배포 주소와 연결 암호예요. 서버의 <b>setup</b> 실행 기록에 나온 링크를 한 번 누르면 자동으로 들어가요.</p>
+      <input class="fld" id="cUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(S.conn?.url || '')}">
+      <input class="fld" id="cTok" type="text" placeholder="연결 암호" value="${esc(S.conn?.token || '')}">
+      <button class="btn wide ghost" data-act="conn" type="button">${S.conn?.url ? '다시 연결' : '연결하기'}</button></div>
+    <p class="diag">${AppKit.env(BUILD)}</p>`;
+}
+function collectSettings() {
+  const s = Object.assign({}, S.d.settings);
+  document.querySelectorAll('#sc [data-set]').forEach(el => {
+    const k = el.dataset.set;
+    s[k] = el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? Number(el.value) : el.value.trim();
+  });
+  return s;
+}
+
+/* ───────── 상세 시트 ───────── */
+const sheet = AppKit.sheet('#sheet');
+async function openDetail(key) {
+  const r = (S.d?.results || []).find(x => x.key === key); if (!r) return;
+  const box = document.getElementById('sheetBody');
+  const draw = (bd, loading) => {
+    box.innerHTML = `<div class="dt"><div class="tags" style="display:flex;gap:5px"><span class="tag ${statusCls(r.status)}">${esc(r.status)}</span><span class="tag">${esc(r.via || '')}</span></div>
+      <h2>${esc(r.name)}</h2><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
+      <dl class="facts"><dt>공고번호</dt><dd>${esc(r.no)}-${esc(r.ord || '000')}</dd><dt>개찰일시</dt><dd>${esc(r.opengDt)}</dd><dt>참가업체</dt><dd>${r.prtcpt || 0}개</dd>
+        ${r.top ? `<dt>1순위</dt><dd>${esc(r.top.name)}</dd><dt>1순위 금액</dt><dd class="num">${wonFull(r.top.amount)} (${rate(r.top.rate)})</dd>` : ''}
+        ${r.mine ? `<dt>우리 회사</dt><dd style="color:var(--mine-ink)">${r.mine.rank || '-'}위 · ${rate(r.mine.rate)}</dd>` : ''}</dl>
+      ${loading ? '<div class="ak-empty">업체별 순위를 불러오는 중…</div>' : bd.length ? `<table class="bd"><tr><th>순위</th><th>업체</th><th class="r">투찰금액</th><th class="r">투찰률</th></tr>
+        ${bd.map(b => `<tr class="${b.mine ? 'mine' : ''}"><td>${b.rank || '-'}</td><td class="nm">${esc(b.name)}${b.rmrk && b.rmrk !== '정상' ? '<br><small style="color:var(--muted)">' + esc(b.rmrk) + '</small>' : ''}</td><td class="r num">${won(b.amount)}</td><td class="r num">${rate(b.rate)}</td></tr>`).join('')}</table>`
+        : '<div class="ak-empty">업체별 순위가 아직 없어요</div>'}
+      <a class="btn wide ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-top:14px" href="https://www.g2b.go.kr" target="_blank" rel="noopener">나라장터에서 보기 (공고번호 ${esc(r.no)})</a></div>`;
+  };
+  draw(r.bidders || [], !(r.bidders || []).length && r.status === '개찰완료');
+  sheet.open();
+  if (!r.read) { r.read = true; api('read', { keys: [key] }).catch(() => {}); setData(S.d, false); }
+  if (!(r.bidders || []).length && r.status === '개찰완료') {
+    try { r.bidders = await api('detail', { key, no: r.no, ord: r.ord }); } catch (e) { r.bidders = []; }
+    if (sheet.isOpen) draw(r.bidders, false);
+  }
+}
+
+/* ───────── 탭·클릭 ───────── */
+const tabs = AppKit.tabs({
+  ids: ['feed', 'search', 'watch', 'set'], remember: 'g2b-alert.tab', start: hashOpt('tab'),
+  render(id) {
+    const sc = document.getElementById('sc');
+    sc.innerHTML = id === 'feed' ? renderFeed() : id === 'search' ? renderSearch() : id === 'watch' ? renderWatch() : renderSet();
+  },
+});
+if (hashOpt('tab')) tabs.go(hashOpt('tab'), 0);
+
+async function mutate(action, payload, msg) {
+  try { const d = await api(action, payload); if (d && d.settings) setData(d); if (msg) AppKit.toast(msg); return d; }
+  catch (e) { AppKit.toast(e.message || '처리하지 못했어요'); }
+}
+document.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (e.target.id === 'sform') { document.activeElement?.blur(); return doSearch(); }
+  const k = e.target.dataset.addto;
+  if (k) {
+    const v = e.target.querySelector('input').value.trim(); if (!v) return;
+    const s = Object.assign({}, S.d.settings); s[k] = [...new Set([...(s[k] || []), v])];
+    e.target.querySelector('input').value = '';
+    await mutate('saveSettings', { settings: s }, '‘' + v + '’ 추가했어요');
+  }
+});
+document.addEventListener('click', async e => {
+  const t = e.target;
+  if (t.closest('#refresh')) return refresh();
+  const op = t.closest('[data-open]'); if (op) return openDetail(op.dataset.open);
+  const st = t.closest('[data-star]');
+  if (st) {
+    const no = st.dataset.star;
+    if (isWatched(no)) { if (!AppKit.sure(st)) return; return mutate('unwatch', { no }, '감시를 해제했어요'); }
+    const item = (S.found?.items || []).find(n => n.no === no);
+    return mutate('watch', { item }, '감시에 넣었어요. 개찰결과가 올라오면 알려 드릴게요');
+  }
+  const dy = t.closest('[data-days]'); if (dy) { S.q.days = +dy.dataset.days; LS.set('q', S.q); return S.q.text || S.found ? doSearch() : tabs.go('search', 0); }
+  const kd = t.closest('[data-kind]');
+  if (kd) { const k = kd.dataset.kind; S.q.kinds = S.q.kinds.includes(k) ? (S.q.kinds.length > 1 ? S.q.kinds.filter(x => x !== k) : S.q.kinds) : [...S.q.kinds, k]; LS.set('q', S.q); return S.found ? doSearch() : tabs.go('search', 0); }
+  const kw = t.closest('[data-kwadd]');
+  if (kw) { const s = Object.assign({}, S.d.settings); if ((s.keywords || []).includes(kw.dataset.kwadd)) return; s.keywords = [...(s.keywords || []), kw.dataset.kwadd]; await mutate('saveSettings', { settings: s }, '키워드로 받을게요'); return tabs.go('search', 0); }
+  const rm = t.closest('[data-rm]');
+  if (rm) { if (!AppKit.sure(rm)) return; const s = Object.assign({}, S.d.settings); s[rm.dataset.rm] = (s[rm.dataset.rm] || []).filter(x => x !== rm.dataset.v); return mutate('saveSettings', { settings: s }, '뺐어요'); }
+  const iv = t.closest('[data-iv]');
+  if (iv) { document.querySelectorAll('[data-iv]').forEach(b => b.classList.toggle('on', b === iv)); S.d.settings = Object.assign({}, collectSettings(), { interval: +iv.dataset.iv }); return; }
+  const a = t.closest('[data-act]')?.dataset.act;
+  if (a === 'readAll') { S.d.results.forEach(r => r.read = true); setData(S.d); return api('read', { all: true }).catch(() => {}); }
+  if (a === 'search') return doSearch();
+  if (a === 'save') return mutate('saveSettings', { settings: Object.assign(collectSettings(), { interval: S.d.settings.interval }) }, '저장했어요. 확인 간격도 바로 바뀌어요');
+  if (a === 'test') return mutate('test', {}, '시험 알림을 보냈어요. 메일·텔레그램을 확인해 보세요');
+  if (a === 'checkNow') { const d = await mutate('checkNow', {}); if (d) AppKit.toast('확인했어요 · 새 결과 ' + (d.newCount || 0) + '건'); return; }
+  if (a === 'conn') {
+    const url = document.getElementById('cUrl').value.trim(), token = document.getElementById('cTok').value.trim();
+    if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)) return AppKit.toast('주소는 https://script.google.com/…/exec 모양이어야 해요');
+    S.conn = { url, token }; LS.set('conn', S.conn); LS.del('mode'); S.demo = false; document.getElementById('demo').hidden = true;
+    await refresh(); return;
+  }
+});
+/* 1분마다, 그리고 앱으로 돌아오면 조용히 새로고침 (시트가 열려 있거나 입력 중이면 건너뜀) */
+AppKit.poll(refresh, 60000, () => sheet.isOpen || AppKit.editing());
+
+if (S.d) { setData(S.d); AppKit.bootDone(); }
+refresh().finally(AppKit.bootDone);
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
