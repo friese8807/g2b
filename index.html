@@ -178,6 +178,9 @@ body.kb #sc{padding-bottom:50vh}
 .grid3 b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13.5px;line-height:1.3;overflow:hidden;word-break:keep-all;overflow-wrap:anywhere}
 .grid3 .mine{background:var(--mine);color:var(--mine-ink)}
 .grid3 .mine small{color:inherit;opacity:.8}
+.grid3 .rival{background:var(--p-blue);color:var(--p-blue-ink)}
+.grid3 .rival small{color:inherit;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.bd tr.rival td{background:var(--p-blue);color:var(--p-blue-ink)}
 
 /* 검색 */
 .sbox{display:flex;gap:8px}
@@ -193,8 +196,8 @@ body.kb #sc{padding-bottom:50vh}
 .star{flex:none;border:1px solid var(--line);background:var(--solid);color:var(--muted);border-radius:10px;height:34px;padding:0 10px;font:inherit;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer}
 .star.on{background:var(--mine);border-color:transparent;color:var(--mine-ink)}
 .star svg{width:15px;height:15px}
-.kwbar{display:flex;align-items:center;gap:10px;background:var(--chip);border-radius:14px;padding:10px 12px;margin:12px 0 4px;font-size:13px;color:var(--top-ink)}
-.kwbar span{flex:1;word-break:keep-all}
+.chip.co-mine{background:var(--mine);color:var(--mine-ink);border-color:transparent}
+.chip.co-rival{background:var(--p-blue);color:var(--p-blue-ink);border-color:transparent}
 .bc .row{display:flex;align-items:flex-start;gap:10px}
 .bc .row>div{flex:1;min-width:0}
 
@@ -550,7 +553,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794677910';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794811724';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -578,15 +581,15 @@ const DEMO = (() => {
   const B = (rank, name, amount, rate, rmrk = '정상', mine = false) => ({ rank, name, amount, rate, rmrk, mine });
   const results = [
     { key: 'R26BK01234567|000', at: t + ' 11:07', no: 'R26BK01234567', ord: '000', name: '2026년 해양공간 통합정보시스템 고도화 사업', org: '해양수산부', demand: '해양수산부 해양공간정책과', opengDt: t + ' 11:00', status: '개찰완료', prtcpt: 9, via: '감시 공고', read: false,
-      top: { name: '(주)한국공간정보', amount: 1268400000, rate: 87.745 }, mine: { rank: 2, amount: 1271900000, rate: 87.987 },
-      bidders: [B(1, '(주)한국공간정보', 1268400000, 87.745), B(2, '(주)올포랜드', 1271900000, 87.987, '정상', true), B(3, '(주)바다엔지니어링', 1274050000, 88.136), B(4, '지오솔루션(주)', 1276300000, 88.291), B(5, '(주)씨엠아이에스', 1279900000, 88.540), B(6, '(주)해양정보기술', 1281000000, 88.617), B(7, '(주)공간인', 1285500000, 88.928), B(8, '(주)디지털맵스', 1290000000, 89.239), B(9, '(주)에코지아이에스', 0, 0, '적격점수 미달')] },
-    { key: 'R26BK01239001|000', at: t + ' 10:32', no: 'R26BK01239001', ord: '000', name: '연안침식 실태조사 GIS 데이터베이스 구축 용역', org: '조달청 부산지방조달청', demand: '부산광역시 해양농수산국', opengDt: t + ' 10:30', status: '개찰완료', prtcpt: 14, via: '키워드 GIS', read: false,
+      top: { name: '(주)한국공간정보', amount: 1268400000, rate: 87.745 }, mine: { rank: 2, amount: 1271900000, rate: 87.987 }, ours: [{ name: '(주)올포랜드', rank: 2, rate: 87.987 }], rivals: [{ name: '(주)해양정보기술', rank: 6, rate: 88.617 }, { name: '(주)지오스토리', rank: 7, rate: 88.928 }],
+      bidders: [B(1, '(주)한국공간정보', 1268400000, 87.745), B(2, '(주)올포랜드', 1271900000, 87.987, '정상', true), B(3, '(주)바다엔지니어링', 1274050000, 88.136), B(4, '지오솔루션(주)', 1276300000, 88.291), B(5, '(주)씨엠아이에스', 1279900000, 88.540), Object.assign(B(6, '(주)해양정보기술', 1281000000, 88.617), { rival: true }), Object.assign(B(7, '(주)지오스토리', 1285500000, 88.928), { rival: true }), B(8, '(주)디지털맵스', 1290000000, 89.239), B(9, '(주)에코지아이에스', 0, 0, '적격점수 미달')] },
+    { key: 'R26BK01239001|000', at: t + ' 10:32', no: 'R26BK01239001', ord: '000', name: '연안침식 실태조사 GIS 데이터베이스 구축 용역', org: '조달청 부산지방조달청', demand: '부산광역시 해양농수산국', opengDt: t + ' 10:30', status: '개찰완료', prtcpt: 14, via: '동종업체 참여', read: false, rivals: [{ name: '(주)지오스토리', rank: 3, rate: 87.214 }],
       top: { name: '(주)바다엔지니어링', amount: 384120000, rate: 86.902 }, mine: null, bidders: [] },
-    { key: 'R26BK01229876|000', at: y + ' 16:04', no: 'R26BK01229876', ord: '000', name: '국가해양관측망 자료 품질관리 시스템 유지관리', org: '국립해양조사원', demand: '국립해양조사원', opengDt: y + ' 16:00', status: '유찰', prtcpt: 1, via: '기관 국립해양조사원', read: true, top: null, mine: null, bidders: [] },
-    { key: 'R26BK01220455|001', at: y + ' 14:11', no: 'R26BK01220455', ord: '001', name: '스마트 항만 디지털트윈 기반 안전관리 플랫폼 구축(재공고)', org: '해양수산부 부산지방해양수산청', demand: '부산지방해양수산청', opengDt: y + ' 14:00', status: '개찰완료', prtcpt: 6, via: '키워드 디지털트윈', read: true,
+    { key: 'R26BK01229876|000', at: y + ' 16:04', no: 'R26BK01229876', ord: '000', name: '국가해양관측망 자료 품질관리 시스템 유지관리', org: '국립해양조사원', demand: '국립해양조사원', opengDt: y + ' 16:00', status: '유찰', prtcpt: 1, via: '동종업체 참여', read: true, top: null, mine: null, bidders: [], rivals: [{ name: '(주)파이텍', rank: 1, rate: 0 }] },
+    { key: 'R26BK01220455|001', at: y + ' 14:11', no: 'R26BK01220455', ord: '001', name: '스마트 항만 디지털트윈 기반 안전관리 플랫폼 구축(재공고)', org: '해양수산부 부산지방해양수산청', demand: '부산지방해양수산청', opengDt: y + ' 14:00', status: '개찰완료', prtcpt: 6, via: '우리 회사 참여', read: true, ours: [{ name: '(주)올포랜드', rank: 1, rate: 87.756 }],
       top: { name: '(주)올포랜드', amount: 2134500000, rate: 87.756 }, mine: { rank: 1, amount: 2134500000, rate: 87.756 }, bidders: [] },
-    { key: 'R26BK01218811|000', at: y2 + ' 11:20', no: 'R26BK01218811', ord: '000', name: '해양경찰 수색구조 지원 공간정보 서비스 개선', org: '해양경찰청', demand: '해양경찰청 수색구조과', opengDt: y2 + ' 11:00', status: '재입찰', prtcpt: 4, via: '키워드 공간정보', read: true, top: null, mine: null, bidders: [] },
-    { key: 'R26BK01217002|000', at: y2 + ' 10:05', no: 'R26BK01217002', ord: '000', name: '수치지도 2.0 갱신 및 정위치 편집(남해권역)', org: '국토지리정보원', demand: '국토지리정보원', opengDt: y2 + ' 10:00', status: '개찰완료', prtcpt: 22, via: '키워드 수치지도', read: true,
+    { key: 'R26BK01218811|000', at: y2 + ' 11:20', no: 'R26BK01218811', ord: '000', name: '해양경찰 수색구조 지원 공간정보 서비스 개선', org: '해양경찰청', demand: '해양경찰청 수색구조과', opengDt: y2 + ' 11:00', status: '재입찰', prtcpt: 4, via: '감시 공고', read: true, top: null, mine: null, bidders: [] },
+    { key: 'R26BK01217002|000', at: y2 + ' 10:05', no: 'R26BK01217002', ord: '000', name: '수치지도 2.0 갱신 및 정위치 편집(남해권역)', org: '국토지리정보원', demand: '국토지리정보원', opengDt: y2 + ' 10:00', status: '개찰완료', prtcpt: 22, via: '우리 회사 참여', read: true, ours: [{ name: '(주)엘티메트릭', rank: 7, rate: 87.106 }], rivals: [{ name: '(주)해양정보기술', rank: 2, rate: 86.73 }],
       top: { name: '(주)디지털맵스', amount: 655300000, rate: 86.512 }, mine: { rank: 7, amount: 659800000, rate: 87.106 }, bidders: [] },
   ];
   const d1 = AppKit.addDays(t, 1), d3 = AppKit.addDays(t, 3), d6 = AppKit.addDays(t, 6);
@@ -607,7 +610,7 @@ const DEMO = (() => {
     { no: 'R26BK01253990', ord: '000', name: '지하시설물 통합정보 GIS 정확도 개선 사업', org: '경기도 용인시', demand: '용인시 도로정책과', postDt: AppKit.addDays(t, -1) + ' 11:00', closeDt: AppKit.addDays(t, 10) + ' 10:00', opengDt: AppKit.addDays(t, 10) + ' 11:00', price: 386000000, kind: 'Servc' },
   ];
   return {
-    settings: { interval: 1, startHour: 8, endHour: 20, weekends: false, kinds: ['Servc'], keywords: ['GIS', '공간정보', '해양', '디지털트윈', '수치지도'], institutions: ['국립해양조사원'], exclude: ['청소'],
+    settings: { interval: 1, startHour: 8, endHour: 20, weekends: false, kinds: ['Servc'], keywords: [], institutions: [], exclude: [], myCompanies: ['올포랜드', '엘티메트릭'], rivals: ['UST21', '유에스티21', '해양정보기술', '그린블루', '지오스토리', '파이텍'],
       myName: '올포랜드', myBizno: '', mail: true, email: '', telegram: true, tgReady: false, widget: true },
     watches: [Object.assign({}, notices[0], { status: '대기' }), Object.assign({}, notices[1], { status: '대기' }),
       { no: 'R26BK01234567', ord: '000', name: '2026년 해양공간 통합정보시스템 고도화 사업', org: '해양수산부', demand: '해양수산부 해양공간정책과', opengDt: t + ' 11:00', price: 1445000000, kind: 'Servc', status: '개찰완료' }],
@@ -704,6 +707,7 @@ const dday = dt => {
 };
 const mdhm = dt => { const m = String(dt || '').match(/\d{4}-(\d\d)-(\d\d)[ T](\d\d:\d\d)/); return m ? +m[1] + '/' + +m[2] + ' ' + m[3] : esc(dt || ''); };
 const nm = t => esc(String(t || '').replace(/(\S)\(/g, '$1\u200B('));
+const coShort = n => String(n || '').replace(/\(주\)|㈜|주식회사/g, '').trim();
 const isWatched = no => (S.d?.watches || []).some(w => w.no === no);
 const IC = { star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
   starO: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>' };
@@ -714,9 +718,11 @@ function cardA(r) {
     <div class="tags"><span class="tag ${statusCls(r.status)}">${esc(r.status)}</span>${r.read ? '' : '<span class="tag t-new">NEW</span>'}<span class="tag">${esc(r.via || '')}</span><span class="tm">${mdhm(r.at)}</span></div>
     <h3>${nm(r.name)}</h3><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
     <div class="grid3">
-      <div><small>1순위</small><b>${r.top ? esc(r.top.name) : r.status === '유찰' ? '유찰' : '-'}</b></div>
+      <div><small>1순위</small><b>${r.top ? esc(coShort(r.top.name)) : r.status === '유찰' ? '유찰' : '-'}</b></div>
       <div><small>투찰률</small><b class="num">${r.top ? rate(r.top.rate) : '-'}</b></div>
-      <div class="${r.mine ? 'mine' : ''}"><small>${r.mine ? '우리 순위' : '참가업체'}</small><b class="num">${r.mine ? (r.mine.rank || '-') + '위' : (r.prtcpt || 0) + '개'}</b></div>
+      ${r.mine ? `<div class="mine"><small>우리 순위</small><b class="num">${r.mine.rank || '-'}위</b></div>`
+        : (r.rivals || []).length ? `<div class="rival"><small>동종 ${esc(coShort(r.rivals[0].name))}</small><b class="num">${r.rivals[0].rank || '-'}위${r.rivals.length > 1 ? ' 외 ' + (r.rivals.length - 1) : ''}</b></div>`
+        : `<div><small>참가업체</small><b class="num">${r.prtcpt || 0}개</b></div>`}
     </div></div>`;
 }
 function renderFeed() {
@@ -739,7 +745,6 @@ function noticeCard(n) {
 }
 function renderSearch() {
   const q = S.q, set = S.d?.settings || {};
-  const kwOn = q.text && (set.keywords || []).includes(q.text.trim());
   let list = '';
   if (S.found === 'busy') list = '<div class="ak-empty">찾는 중이에요…</div>';
   else if (S.found?.error) list = `<div class="ak-empty">${esc(S.found.error)}<br><button data-act="search" type="button">다시 시도</button></div>`;
@@ -750,7 +755,6 @@ function renderSearch() {
   return `<form class="sbox" id="sform"><input id="qtext" type="search" enterkeyhint="search" placeholder="사업명·기관·공고번호" value="${esc(q.text)}" autocomplete="off"><button class="btn" type="submit">검색</button></form>
     <div class="chips">${[7, 30, 90].map(n => `<button class="chip ${q.days === n ? 'on' : ''}" data-days="${n}" type="button">${n}일</button>`).join('')}
       <span style="width:6px"></span>${KINDS.map(([k, l]) => `<button class="chip ${q.kinds.includes(k) ? 'on' : ''}" data-kind="${k}" type="button">${l}</button>`).join('')}</div>
-    ${q.text && S.found && !S.found.error && S.found !== 'busy' ? `<div class="kwbar"><span>‘${esc(q.text)}’ 이(가) 들어간 <b>모든 사업</b>의 개찰결과도 받을까요?</span><button class="btn sm ${kwOn ? 'ghost' : ''}" data-kwadd="${esc(q.text)}" type="button">${kwOn ? '받는 중' : '키워드로 받기'}</button></div>` : ''}
     ${list}`;
 }
 async function doSearch() {
@@ -764,19 +768,19 @@ async function doSearch() {
 /* ───────── 감시 탭 ───────── */
 function renderWatch() {
   const W = S.d?.watches || [], st = S.d?.settings || {};
-  const chipList = (k, label, ph) => `<div class="card"><h2>${label} <span style="color:var(--muted);font-weight:600;font-size:12.5px">${(st[k] || []).length}개</span></h2>
-    <p class="sub">${ph}</p><div class="chips" style="margin-top:0">${(st[k] || []).map(w => `<button class="chip" data-rm="${k}" data-v="${esc(w)}" type="button">${esc(w)} <span class="x">✕</span></button>`).join('')}</div>
-    <form class="sbox" data-addto="${k}" style="margin-top:10px"><input class="fld" style="margin:0;height:42px" placeholder="추가할 낱말" autocomplete="off"><button class="btn sm" style="height:42px" type="submit">추가</button></form></div>`;
+  const chipList = (k, label, ph, cls) => `<div class="card"><h2>${label} <span style="color:var(--muted);font-weight:600;font-size:12.5px">${(st[k] || []).length}곳</span></h2>
+    <p class="sub">${ph}</p><div class="chips" style="margin-top:0">${(st[k] || []).map(w => `<button class="chip ${cls}" data-rm="${k}" data-v="${esc(w)}" type="button">${esc(w)} <span class="x">✕</span></button>`).join('')}</div>
+    <form class="sbox" data-addto="${k}" style="margin-top:10px"><input class="fld" style="margin:0;height:42px" placeholder="추가할 업체 이름" autocomplete="off"><button class="btn sm" style="height:42px" type="submit">추가</button></form></div>`;
   const wl = W.length ? W.map(w => `<div class="bc" data-notice="${esc(w.no)}"><div class="row"><div>
       <div class="tags"><span class="tag ${statusCls(w.status)}">${esc(w.status || '대기')}</span>${w.urgent ? '<span class="tag t-urgent">긴급</span>' : ''}${w.status === '대기' && dday(w.opengDt) ? '<span class="tag t-violet">개찰 ' + dday(w.opengDt) + '</span>' : ''}</div>
       <h3>${nm(w.name)}</h3><div class="org">${esc(w.demand || w.org)} · 개찰 ${mdhm(w.opengDt)}</div></div>
       <button class="star on" data-star="${esc(w.no)}" type="button">${IC.star}해제</button></div></div>`).join('')
     : '<div class="ak-empty">감시 중인 공고가 없어요. 검색 탭에서 별표를 눌러 추가하세요.</div>';
   return `<div class="sec">감시 중인 공고 <span class="n">${W.length}건</span></div><div class="bcl">${wl}</div>
-    <div class="sec">조건으로 받기</div>
-    ${chipList('keywords', '공고명 키워드', '공고명에 이 낱말이 하나라도 들어가면 알려요. 띄어쓰기는 무시해요.')}
-    ${chipList('institutions', '기관', '공고기관·수요기관 이름에 들어가면 알려요. 예: 해양수산부, 해양경찰청')}
-    ${chipList('exclude', '제외할 낱말', '공고명에 이 낱말이 있으면 알리지 않아요. 예: 청소, 경비')}`;
+    <div class="sec">업체로 받기</div>
+    <p class="note">개찰결과는 <b>감시 중인 공고</b>, <b>우리 회사가 참여한 개찰</b>, <b>동종업체가 참여한 개찰</b>만 알려요.</p>
+    ${chipList('myCompanies', '우리 회사', '참가업체에 이 이름이 있으면 알리고, 순위표에서 노랗게 표시해요. (주)·주식회사·띄어쓰기는 무시해요.', 'co-mine')}
+    ${chipList('rivals', '동종업체', '참가업체에 이 이름이 있으면 알리고, 순위표에서 파랗게 표시해요. 한글 이름이 따로 있으면 함께 넣어요(예: UST21 · 유에스티21).', 'co-rival')}`;
 }
 
 /* ───────── 설정 탭 ───────── */
@@ -802,10 +806,7 @@ function renderSet() {
       <div class="line"><div class="lb">Gmail<small>${esc(s.email || '구글 계정 메일')}로 보내요. Gmail 앱 알림을 켜 두면 바로 울려요</small></div>${sw('mail', s.mail)}</div>
       <div class="line"><div class="lb">텔레그램<small>${s.tgReady ? '<span class="ok">연결됨</span>' : '봇 연결이 필요해요 (README 안내)'}</small></div>${sw('telegram', s.telegram)}</div>
       <div class="line"><div class="lb">아이폰 위젯<small>홈 화면·잠금 화면에서 최근 개찰결과를 봐요</small></div><a class="btn sm ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="widget.html">설치 안내</a></div></div>
-    <div class="card"><h2>우리 회사</h2><p class="sub">개찰 순위표에서 우리 회사를 찾아 순위를 알려 드려요.</p>
-      <input class="fld" data-set="myName" type="text" placeholder="회사 이름 (예: 올포랜드)" value="${esc(s.myName || '')}">
-      <input class="fld" data-set="myBizno" type="text" inputmode="numeric" placeholder="사업자번호 (선택, 숫자만)" value="${esc(s.myBizno || '')}">
-      <button class="btn wide" data-act="save" type="button">회사 정보 저장</button></div>
+    <div class="card"><h2>알림 받는 개찰결과</h2><p class="sub" style="margin:0">★ 감시 공고 · 우리 회사(${esc((s.myCompanies || []).join(', ') || '-')}) 참여 · 동종업체(${esc((s.rivals || []).length)}곳) 참여. 업체는 감시 탭에서 바꿔요.</p></div>
 
     <div class="chips" style="justify-content:center;margin-top:12px"><button class="chip" data-act="test" type="button">시험 알림 보내기</button><button class="chip" data-act="checkNow" type="button">지금 확인하기</button></div>
     <div class="card" style="margin-top:14px"><h2>서버 상태</h2>
@@ -859,9 +860,10 @@ async function openDetail(key) {
       <h2>${nm(r.name)}</h2><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
       <dl class="facts"><dt>공고번호</dt><dd>${esc(r.no)}-${esc(r.ord || '000')}</dd><dt>개찰일시</dt><dd>${esc(r.opengDt)}</dd><dt>참가업체</dt><dd>${r.prtcpt || 0}개</dd>
         ${r.top ? `<dt>1순위</dt><dd>${esc(r.top.name)}</dd><dt>1순위 금액</dt><dd class="num">${wonFull(r.top.amount)} (${rate(r.top.rate)})</dd>` : ''}
-        ${r.mine ? `<dt>우리 회사</dt><dd style="color:var(--mine-ink)">${r.mine.rank || '-'}위 · ${rate(r.mine.rate)}</dd>` : ''}</dl>
+        ${r.mine ? `<dt>우리 회사</dt><dd style="color:var(--mine-ink)">${(r.ours || []).length ? r.ours.map(b => esc(coShort(b.name)) + ' ' + (b.rank || '-') + '위').join(' · ') : (r.mine.rank || '-') + '위 · ' + rate(r.mine.rate)}</dd>` : ''}
+        ${(r.rivals || []).length ? `<dt>동종업체</dt><dd style="color:var(--p-blue-ink)">${r.rivals.map(b => esc(coShort(b.name)) + ' ' + (b.rank || '-') + '위').join(' · ')}</dd>` : ''}</dl>
       ${loading ? '<div class="ak-empty">업체별 순위를 불러오는 중…</div>' : bd.length ? `<table class="bd"><tr><th>순위</th><th>업체</th><th class="r">투찰금액</th><th class="r">투찰률</th></tr>
-        ${bd.map(b => `<tr class="${b.mine ? 'mine' : ''}"><td>${b.rank || '-'}</td><td class="nm">${esc(b.name)}${b.rmrk && b.rmrk !== '정상' ? '<br><small style="color:var(--muted)">' + esc(b.rmrk) + '</small>' : ''}</td><td class="r num">${won(b.amount)}</td><td class="r num">${rate(b.rate)}</td></tr>`).join('')}</table>`
+        ${bd.map(b => `<tr class="${b.mine ? 'mine' : b.rival ? 'rival' : ''}"><td>${b.rank || '-'}</td><td class="nm">${esc(b.name)}${b.rmrk && b.rmrk !== '정상' ? '<br><small style="color:var(--muted)">' + esc(b.rmrk) + '</small>' : ''}</td><td class="r num">${won(b.amount)}</td><td class="r num">${rate(b.rate)}</td></tr>`).join('')}</table>`
         : '<div class="ak-empty">업체별 순위가 아직 없어요</div>'}
       <div id="rNotice">${r.notice ? infoHtml(r.notice.info) : ''}</div>
       ${g2bLink(r.notice && r.notice.url, r.no)}</div>`;
@@ -932,8 +934,6 @@ document.addEventListener('click', async e => {
   const dy = t.closest('[data-days]'); if (dy) { S.q.days = +dy.dataset.days; LS.set('q', S.q); return S.q.text || S.found ? doSearch() : tabs.go('search', 0); }
   const kd = t.closest('[data-kind]');
   if (kd) { const k = kd.dataset.kind; S.q.kinds = S.q.kinds.includes(k) ? (S.q.kinds.length > 1 ? S.q.kinds.filter(x => x !== k) : S.q.kinds) : [...S.q.kinds, k]; LS.set('q', S.q); return S.found ? doSearch() : tabs.go('search', 0); }
-  const kw = t.closest('[data-kwadd]');
-  if (kw) { const s = Object.assign({}, S.d.settings); if ((s.keywords || []).includes(kw.dataset.kwadd)) return; s.keywords = [...(s.keywords || []), kw.dataset.kwadd]; await mutate('saveSettings', { settings: s }, '키워드로 받을게요'); return tabs.go('search', 0); }
   const rm = t.closest('[data-rm]');
   if (rm) { if (!AppKit.sure(rm, '뺄까요?')) return; const s = Object.assign({}, S.d.settings); s[rm.dataset.rm] = (s[rm.dataset.rm] || []).filter(x => x !== rm.dataset.v); return mutate('saveSettings', { settings: s }, '뺐어요'); }
   const iv = t.closest('[data-iv]');
@@ -945,7 +945,6 @@ document.addEventListener('click', async e => {
   const a = t.closest('[data-act]')?.dataset.act;
   if (a === 'readAll') { S.d.results.forEach(r => r.read = true); setData(S.d); return api('read', { all: true }).catch(() => {}); }
   if (a === 'search') return doSearch();
-  if (a === 'save') return mutate('saveSettings', { settings: { myName: document.querySelector('[data-set=myName]').value.trim(), myBizno: document.querySelector('[data-set=myBizno]').value.replace(/\D/g, '') } }, '회사 정보를 저장했어요');
   if (a === 'test') {
     const d = await mutate('test', {}); if (!d) return;
     const t = d.sent || {}, ok = [t.mail && 'Gmail', t.tg && '텔레그램'].filter(Boolean);

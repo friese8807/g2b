@@ -23,9 +23,14 @@ const BID_APIS = [
 const P = PropertiesService.getScriptProperties();
 const DEFAULTS = {
   interval: 1, startHour: 8, endHour: 20, weekends: false, kinds: ['Servc'],
-  keywords: ['GIS', '공간정보', '해양'], institutions: [], exclude: [],
+  // 개찰결과 알림 대상: ★감시 공고 + 우리 회사가 참여한 개찰 + 동종업체가 참여한 개찰 (2026-11-16 사용자 지정)
+  myCompanies: ['올포랜드', '엘티메트릭'],
+  rivals: ['UST21', '유에스티21', '해양정보기술', '그린블루', '지오스토리', '파이텍'],
+  keywords: [], institutions: [], exclude: [],
   myName: '올포랜드', myBizno: '', mail: true, email: '', telegram: true,
 };
+// 예전 설정(키워드 감시)에서 넘어올 때 한 번: 키워드 알림은 쓰지 않는다
+const RULE_VER = '2';
 const KIND_NM = { Servc: '용역', Thng: '물품', Cnstwk: '공사', Frgcpt: '외자' };
 
 // ════════════════════════ 앱 요청 처리 ════════════════════════
@@ -106,6 +111,12 @@ function snapshot_() {
 function settings_() {
   let s = {};
   try { s = JSON.parse(P.getProperty('settings') || '{}'); } catch (e) {}
+  if (s.ruleVer !== RULE_VER) {
+    s.keywords = []; s.institutions = []; s.exclude = []; s.ruleVer = RULE_VER;
+    if (!s.myCompanies) s.myCompanies = DEFAULTS.myCompanies.slice();
+    if (!s.rivals) s.rivals = DEFAULTS.rivals.slice();
+    P.setProperty('settings', JSON.stringify(s));
+  }
   return Object.assign({}, DEFAULTS, s);
 }
 
@@ -117,7 +128,7 @@ function saveSettings_(inp) {
   if ('startHour' in inp) s.startHour = Math.max(0, Math.min(24, Number(inp.startHour) || 0));
   if ('endHour' in inp) s.endHour = Math.max(0, Math.min(24, Number(inp.endHour) || 24));
   ['weekends', 'mail', 'telegram'].forEach(k => { if (k in inp) s[k] = !!inp[k]; });
-  ['keywords', 'institutions', 'exclude'].forEach(k => { if (k in inp) s[k] = list(inp[k]); });
+  ['keywords', 'institutions', 'exclude', 'myCompanies', 'rivals'].forEach(k => { if (k in inp) s[k] = list(inp[k]); });
   if ('kinds' in inp) { const k = list(inp.kinds).filter(x => KIND_NM[x]); if (k.length) s.kinds = k; }
   ['myName', 'myBizno', 'email'].forEach(k => { if (k in inp) s[k] = String(inp[k] || '').trim().slice(0, 80); });
   if (s.startHour >= s.endHour) { s.startHour = old.startHour; s.endHour = old.endHour; }
@@ -426,45 +437,51 @@ function check_(force) {
     if (!force && !activeNow_(now, s)) return 0;
     const W = watches_();
     const found = {};
-    const add = (r, via) => { const k = keyOf_(r); if (!found[k]) { r._via = via; found[k] = r; } };
+    const add = (r, via) => { const k = keyOf_(r); if (!found[k]) { r._via = via; found[k] = r; } else if (via && !found[k]._via) found[k]._via = via; };
 
     // 1) 빠른 감시: 지난 확인 이후 입력된 개찰결과 전체 (10분 겹치게)
     const last = Number(P.getProperty('lastRun') || 0);
     const from = new Date(Math.max(last ? last - 10 * 60e3 : 0, now - 90 * 60e3));
     s.kinds.forEach(k => {
       fetchAll_(SCRS + 'getOpengResultListInfo' + k, { inqryDiv: '1', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(now) }, 20, 15)
-        .forEach(r => { const v = via_(r, s, W); if (v) add(r, v); });
+        .forEach(r => add(r, W.some(w => w.no === String(r.bidNtceNo).trim()) ? '감시 공고' : ''));
     });
 
-    // 2) 안전망: 감시 공고 중 개찰 시각이 지난 것 + 키워드 (30분마다)
+    // 2) 안전망: 감시 공고 중 개찰 시각이 지난 것 (30분마다)
     const lastSweep = Number(P.getProperty('lastSweep') || 0);
     if (force || now - lastSweep >= 30 * 60e3) {
       const old = fmt_(new Date(now - 14 * 864e5));
       W.filter(w => { const o = String(w.opengDt || '').replace(/\D/g, '').slice(0, 12); return w.status === '대기' && (!o || (o <= fmt_(now) && o >= old)); })
         .forEach(w => {
           fetchAll_(SCRS + 'getOpengResultListInfo' + (w.kind || 'Servc') + 'PPSSrch', { inqryDiv: '3', bidNtceNo: w.no }, 20, 1)
-            .forEach(r => add(r, '감시 공고'));
+            .forEach(r => { r._via = ''; add(r, '감시 공고'); });
         });
-      const begin = new Date(now - 2 * 864e5);
-      s.kinds.forEach(k => s.keywords.forEach(kw => {
-        // 긴 기간은 0건이 될 수 있어 하루씩 두 번
-        [[new Date(now - 864e5), now], [begin, new Date(now - 864e5)]].reduce((acc, [b, e]) =>
-          acc.concat(fetchAll_(SCRS + 'getOpengResultListInfo' + k + 'PPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(b), inqryEndDt: fmt_(e), bidNtceNm: kw }, 20, 5)), [])
-          .forEach(r => { const v = via_(r, s, W); if (v) add(r, v); });
-      }));
       P.setProperty('lastSweep', String(now.getTime()));
     }
     P.setProperty('lastRun', String(now.getTime()));
     P.setProperty('lastRunText', Utilities.formatDate(now, TZ, 'yyyy-MM-dd HH:mm'));
 
-    // 3) 처음 보는 결과(같은 공고라도 상태가 바뀌면 새 결과)만 저장·알림
+    // 3) 처음 보는 결과만. 감시 공고가 아니면 참가업체 목록을 받아 우리 회사·동종업체가 있을 때만 알린다
     const seen = {};
     rows_(sheet_('결과')).forEach(r => { seen[r[1] + '|' + r[2]] = 1; });
+    const cache = CacheService.getScriptCache();   // 확인했지만 알릴 것이 없던 결과 (6시간 기억 → 같은 결과를 다시 묻지 않음)
+    const todo = Object.keys(found).filter(k => {
+      const st = found[k].progrsDivCdNm || '개찰';
+      return !seen[k + '|' + st] && !cache.get('chk|' + k + '|' + st);
+    });
+    // 참가업체 목록이 필요한 것(개찰완료)을 한꺼번에(병렬로) 받는다
+    const need = todo.filter(k => (found[k].progrsDivCdNm || '') === '개찰완료');
+    const lists = biddersMany_(need.map(k => found[k]), s);
     let changed = false;
-    Object.keys(found).forEach(k => {
+    todo.forEach(k => {
       const raw = found[k], status = raw.progrsDivCdNm || '개찰';
-      if (seen[k + '|' + status]) return;
-      const r = buildResult_(raw, s);
+      let bd = lists[k];
+      // 유찰·재입찰은 참가업체 목록 대신 1순위 정보(opengCorpInfo)만 본다
+      if (!bd) { const t = parseTop_(raw.opengCorpInfo); bd = t ? [markCo_({ rank: 1, name: t.name, amount: Number(t.amount) || 0, rate: Number(t.rate) || 0, rmrk: '' }, s)] : []; }
+      const hasMine = bd.some(b => b.mine), hasRival = bd.some(b => b.rival);
+      if (!raw._via) raw._via = hasMine ? '우리 회사 참여' : hasRival ? '동종업체 참여' : '';
+      if (!raw._via) { cache.put('chk|' + k + '|' + status, '1', 21600); return; }
+      const r = buildResult_(raw, s, bd);
       addResult_(r);
       notify_(r, s);
       newCount++;
@@ -483,20 +500,8 @@ function check_(force) {
   return newCount;
 }
 
-/** 왜 알림 대상인지 ('감시 공고' / '키워드 GIS' / '기관 …'), 아니면 '' */
-function via_(r, s, W) {
-  const norm = x => String(x || '').replace(/\s/g, '').toLowerCase();
-  const name = norm(r.bidNtceNm);
-  if (W.some(w => w.no === String(r.bidNtceNo).trim())) return '감시 공고';
-  if (s.exclude.some(x => name.indexOf(norm(x)) >= 0)) return '';
-  const kw = s.keywords.find(x => name.indexOf(norm(x)) >= 0);
-  if (kw) return '키워드 ' + kw;
-  const inst = norm(r.ntceInsttNm) + '|' + norm(r.dminsttNm);
-  const it = s.institutions.find(x => inst.indexOf(norm(x)) >= 0);
-  return it ? '기관 ' + it : '';
-}
 
-function buildResult_(raw, s) {
+function buildResult_(raw, s, given) {
   const top = parseTop_(raw.opengCorpInfo);
   const r = {
     key: keyOf_(raw), at: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'),
@@ -505,14 +510,42 @@ function buildResult_(raw, s) {
     status: raw.progrsDivCdNm || '개찰', prtcpt: Number(raw.prtcptCnum || 0), via: raw._via || '',
     top: top ? { name: top.name, amount: Number(top.amount) || 0, rate: Number(top.rate) || 0 } : null, mine: null, bidders: [],
   };
-  if (r.status === '개찰완료') {
-    const all = bidders_(r, s);
-    const mine = all.filter(b => b.mine)[0];
-    if (mine) r.mine = { rank: mine.rank, amount: mine.amount, rate: mine.rate };
-    r.bidders = all.slice(0, 10);
-    if (mine && r.bidders.indexOf(mine) < 0) r.bidders.push(mine);
-  }
+  const all = given || (r.status === '개찰완료' ? bidders_(r, s) : []);
+  const mine = all.filter(b => b.mine)[0];
+  if (mine) r.mine = { rank: mine.rank, amount: mine.amount, rate: mine.rate, name: mine.name };
+  r.ours = all.filter(b => b.mine).map(b => ({ name: b.name, rank: b.rank, rate: b.rate }));
+  r.rivals = all.filter(b => b.rival).map(b => ({ name: b.name, rank: b.rank, rate: b.rate }));
+  // 상위 10곳 + 그 밖의 우리·동종업체
+  r.bidders = all.slice(0, 10).concat(all.slice(10).filter(b => b.mine || b.rival));
   return r;
+}
+
+/** 업체 이름 비교용: (주)·주식회사·빈칸·대소문자를 빼고 비교 */
+function coNorm_(x) { return String(x || '').replace(/\(주\)|㈜|주식회사|\(유\)|유한회사|\s/g, '').toLowerCase(); }
+function markCo_(b, s) {
+  const n = coNorm_(b.name), biz = String(s.myBizno || '').replace(/\D/g, '');
+  const mineList = (s.myCompanies && s.myCompanies.length ? s.myCompanies : [s.myName]).map(coNorm_).filter(Boolean);
+  b.mine = (biz && String(b.bizno || '').replace(/\D/g, '') === biz) || mineList.some(m => n.indexOf(m) >= 0);
+  b.rival = !b.mine && (s.rivals || []).map(coNorm_).filter(Boolean).some(m => n.indexOf(m) >= 0);
+  return b;
+}
+
+/** 여러 개찰결과의 참가업체 목록을 한꺼번에(10개씩 병렬). 결과: { 키: [업체…] } */
+function biddersMany_(raws, s) {
+  const out = {};
+  if (!raws.length) return out;
+  const res = fetchMany_(raws.map(r => ({ url: SCRS + 'getOpengResultListInfoOpengCompt',
+    params: Object.assign({ numOfRows: 200, pageNo: 1, bidNtceNo: String(r.bidNtceNo).trim() }, r.bidNtceOrd ? { bidNtceOrd: r.bidNtceOrd } : {}) })));
+  res.forEach((x, i) => {
+    if (x.err) { console.warn('참가업체 조회 실패 ' + raws[i].bidNtceNo + ': ' + x.err); return; }
+    const r = raws[i], it = x.body.items, items = Array.isArray(it) ? it : it && it.item ? [].concat(it.item) : [];
+    out[keyOf_(r)] = items
+      .filter(b => (!r.bidClsfcNo || !b.bidClsfcNo || b.bidClsfcNo === r.bidClsfcNo) && (!r.rbidNo || !b.rbidNo || b.rbidNo === r.rbidNo))
+      .map(b => markCo_({ rank: Number(b.opengRank) || 0, name: b.prcbdrNm || '', bizno: b.prcbdrBizno || '', amount: Number(b.bidprcAmt) || 0,
+        rate: Number(b.bidprcrt) || 0, rmrk: String(b.rmrk || '').trim() }, s))
+      .sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9));
+  });
+  return out;
 }
 
 /** 업체별 개찰순위 */
@@ -520,14 +553,10 @@ function bidders_(r, s) {
   try {
     const p = { bidNtceNo: r.no };
     if (r.ord) p.bidNtceOrd = r.ord;
-    const biz = String(s.myBizno || '').replace(/\D/g, ''), nm = String(s.myName || '').replace(/\s/g, '');
     return fetchAll_(SCRS + 'getOpengResultListInfoOpengCompt', p, 100, 3)
       .filter(b => (!r.cls || !b.bidClsfcNo || b.bidClsfcNo === r.cls) && (!r.rbid || !b.rbidNo || b.rbidNo === r.rbid))
-      .map(b => ({
-        rank: Number(b.opengRank) || 0, name: b.prcbdrNm || '', amount: Number(b.bidprcAmt) || 0, rate: Number(b.bidprcrt) || 0,
-        rmrk: String(b.rmrk || '').trim(),
-        mine: (biz && String(b.prcbdrBizno || '').replace(/\D/g, '') === biz) || (!!nm && String(b.prcbdrNm || '').replace(/\s/g, '').indexOf(nm) >= 0),
-      }))
+      .map(b => markCo_({ rank: Number(b.opengRank) || 0, name: b.prcbdrNm || '', bizno: b.prcbdrBizno || '', amount: Number(b.bidprcAmt) || 0,
+        rate: Number(b.bidprcrt) || 0, rmrk: String(b.rmrk || '').trim() }, s))
       .sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9));
   } catch (e) { console.warn('업체별 순위 조회 실패: ' + e); return []; }
 }
@@ -545,19 +574,22 @@ function notify_(r, s) {
   const sent = { mail: false, tg: false, tgErr: '' };
   const subject = '[' + r.status + '] ' + r.name
     + (r.top ? ' — 1순위 ' + r.top.name + ' (' + rate_(r.top.rate) + ')' : '')
-    + (r.mine ? ' / 우리 ' + (r.mine.rank || '-') + '위' : '');
+    + (r.mine ? ' / 우리 ' + (r.mine.rank || '-') + '위' : '')
+    + (!r.mine && (r.rivals || []).length ? ' / 동종 ' + r.rivals[0].name.replace(/\(주\)|주식회사/g, '').trim() + ' ' + (r.rivals[0].rank || '-') + '위' : '');
   const lines = [
     '공고번호: ' + r.no + '-' + (r.ord || '000') + ' · ' + r.via,
     '기관: ' + r.org + (r.demand && r.demand !== r.org ? ' / ' + r.demand : ''),
     '개찰: ' + r.opengDt + ' · 참가 ' + r.prtcpt + '개사',
   ];
   if (r.top) lines.push('1순위: ' + r.top.name + ' ' + won_(r.top.amount) + ' (' + rate_(r.top.rate) + ')');
-  if (r.mine) lines.push('우리 회사: ' + (r.mine.rank || '순위없음') + '위 ' + won_(r.mine.amount) + ' (' + rate_(r.mine.rate) + ')');
+  if ((r.ours || []).length) lines.push('우리 회사: ' + r.ours.map(b => b.name + ' ' + (b.rank || '순위없음') + '위 (' + rate_(b.rate) + ')').join(' · '));
+  else if (r.mine) lines.push('우리 회사: ' + (r.mine.rank || '순위없음') + '위 ' + won_(r.mine.amount) + ' (' + rate_(r.mine.rate) + ')');
+  if ((r.rivals || []).length) lines.push('동종업체: ' + r.rivals.map(b => b.name + ' ' + (b.rank || '순위없음') + '위 (' + rate_(b.rate) + ')').join(' · '));
 
   if (s.mail) {
     const table = r.bidders.length ? '<table cellpadding="5" style="border-collapse:collapse;font-size:13px">'
       + '<tr style="background:#e9f2fa"><th>순위</th><th align="left">업체</th><th align="right">투찰금액</th><th align="right">투찰률</th></tr>'
-      + r.bidders.map(b => '<tr style="border-top:1px solid #ddd' + (b.mine ? ';background:#fff4c2;font-weight:bold' : '') + '"><td>' + (b.rank || '-') + '</td><td>'
+      + r.bidders.map(b => '<tr style="border-top:1px solid #ddd' + (b.mine ? ';background:#fff4c2;font-weight:bold' : b.rival ? ';background:#e1eefb' : '') + '"><td>' + (b.rank || '-') + '</td><td>'
         + esc_(b.name) + (b.rmrk && b.rmrk !== '정상' ? ' <small>(' + esc_(b.rmrk) + ')</small>' : '') + '</td><td align="right">' + won_(b.amount) + '</td><td align="right">' + rate_(b.rate) + '</td></tr>').join('')
       + '</table>' : '';
     MailApp.sendEmail({
@@ -570,7 +602,7 @@ function notify_(r, s) {
   }
   if (s.telegram) {
     sent.tg = tg_(subject + '\n\n' + lines.join('\n') + (r.bidders.length ? '\n\n' + r.bidders.slice(0, 5).map(b =>
-      (b.rank || '-') + '. ' + b.name + ' ' + rate_(b.rate) + (b.mine ? ' ◀ 우리' : '')).join('\n') : '') + '\n\n' + APP_URL);
+      (b.rank || '-') + '. ' + b.name + ' ' + rate_(b.rate) + (b.mine ? ' ◀ 우리' : b.rival ? ' ◀ 동종' : '')).join('\n') : '') + '\n\n' + APP_URL);
     if (!sent.tg) sent.tgErr = P.getProperty('TG_TOKEN') ? '봇에게 먼저 말을 걸고 testTelegram 을 실행해 보세요' : 'TG_TOKEN 이 없어요';
   }
   return sent;
