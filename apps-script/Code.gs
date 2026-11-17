@@ -767,7 +767,7 @@ function sanction_(x) {
 }
 
 /** 업체명 → 조달업체 기본정보 목록. 업체명은 조회구분 1(등록일)·2(변경일)에서만 받으므로 기간을 아주 길게 준다.
- *  입찰공고 API처럼 긴 기간에 0건을 줄 수 있어, 0건이면 5년씩 잘라 다시 부른다 */
+ *  긴 기간을 주면 0건이 와서 1년씩 나눠 부른다 */
 function corpByName_(name) {
   const now = new Date(), clean = String(name).replace(/\(주\)|㈜|주식회사|\(유\)|유한회사/g, '').trim();
   const seen = {}, out = [];
@@ -778,22 +778,21 @@ function corpByName_(name) {
     TRACE.push({ api: label, n: n, calls: calls, err: errs ? errs + '번 실패: ' + lastErr : '' });
   };
   const call = (names, div, from, to) => names.map(nm => ({ url: USR + 'getPrcrmntCorpBasicInfo02', params: { numOfRows: 100, pageNo: 1, inqryDiv: div, inqryBgnDt: fmt_(from), inqryEndDt: fmt_(to), corpNm: nm } }));
-  const run = (names, label, short) => {
-    const memo = P.getProperty('corpWin');   // 되는 방식 기억: 'all' 또는 '5y'
-    if (memo !== '5y') {
-      const L = call(names, '1', new Date(1990, 0, 1), now).concat(call(names, '2', new Date(1990, 0, 1), now));
-      take(fetchMany_(L), '기본정보 ' + label + '(전체 기간)', L.length);
-      if (out.length) { P.setProperty('corpWin', 'all'); return; }
-      if (short) return;   // 붙여 보는 이름까지 5년씩 나누면 호출이 너무 많아진다
-    }
+  // 이 API는 기간을 길게 주면 0건이 온다(시험: 1년은 되고 1990년~지금은 0건). 그래서 1년씩 나눠 묻는다.
+  // 업체명은 '포함' 검색이라 '올포랜드'로 '주식회사 올포랜드'가 나온다.
+  const yearAgo = k => { const d = new Date(now); d.setFullYear(d.getFullYear() - k); return d; };
+  const run = (names, label, divs, k0, k1) => {
     const L = [];
-    for (let y = now.getFullYear(); y >= 1995; y -= 5) L.push.apply(L, call(names, '1', new Date(y - 4, 0, 1), y === now.getFullYear() ? now : new Date(y, 11, 31, 23, 59)));
-    take(fetchMany_(L), '기본정보 ' + label + '(5년씩)', L.length);
-    if (out.length) P.setProperty('corpWin', '5y');
+    for (let k = k0; k < k1; k++) divs.forEach(dv => L.push.apply(L, call(names, dv, yearAgo(k + 1), k ? yearAgo(k) : now)));
+    take(fetchMany_(L), '기본정보 ' + label, L.length);
   };
-  // 넣은 그대로 → 안 되면 (주)·주식회사를 앞뒤로 붙여서
-  run([...new Set([name, clean])], '"' + name + '"');
-  if (!out.length && clean) run(['(주)' + clean, clean + '(주)', '주식회사 ' + clean, '주식회사' + clean, clean + ' 주식회사', '㈜' + clean], '(주)·주식회사 붙여서', true);
+  const names = [...new Set([clean || name, name].filter(Boolean))];
+  const q = '"' + names[0] + '"';
+  // 1) 최근 3년 안에 정보를 바꾼 업체(대부분 해마다 갱신한다)
+  run(names, q + ' 변경일 최근 3년', ['2'], 0, 3);
+  // 2) 없으면 등록일·변경일 10년까지
+  if (!out.length) run(names, q + ' 등록·변경 3~10년', ['1', '2'], 3, 10);
+  if (!out.length) run(names, q + ' 등록 최근 3년', ['1'], 0, 3);
   return out;
 }
 
