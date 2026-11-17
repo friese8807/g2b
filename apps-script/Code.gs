@@ -703,7 +703,8 @@ function debar_(text) {
   else {
     corpByName_(text).forEach(c => put(c.bizno, { name: c.corpNm, ceo: c.ceoNm, addr: [c.rgnNm || '', c.adrs || ''].join(' ').trim(), kind: c.corpBsnsDivNm }));
     // 제재 목록에서 이름으로 직접 찾기
-    sanctionList_().filter(r => coNorm_(r.corpNm).indexOf(coNorm_(text)) >= 0).forEach(r => put(r.bizno, { name: r.corpNm }));
+    // 제재 이력에서 이름으로 직접 찾기 (기본정보에 없는 업체 대비)
+    try { history_().filter(r => coNorm_(r.corpNm).indexOf(coNorm_(text)) >= 0).forEach(r => put(r.bizno, { name: r.corpNm })); } catch (e) { TRACE.push({ api: '제재 이력', n: 0, err: e.message }); }
   }
   // 이름이 정확히 같은 업체 먼저, 최대 15곳
   const key = coNorm_(text);
@@ -722,11 +723,14 @@ function debar_(text) {
     try { const c = items_(call_(USR + 'getPrcrmntCorpBasicInfo02', { numOfRows: 1, pageNo: 1, inqryDiv: '3', bizno: digits }))[0];
       if (c) Object.assign(list[0], { name: list[0].name || c.corpNm, ceo: c.ceoNm, addr: [c.rgnNm || '', c.adrs || ''].join(' ').trim(), kind: c.corpBsnsDivNm }); } catch (e) {}
   }
+  // 지난 제재까지: 이력 시트에서 같은 사업자번호를 붙인다
+  let hist = []; try { hist = history_(); } catch (e) {}
+  list.forEach(o => hist.forEach(h => { if (h.bizno === o.bizno) { o.sanctions.push(h); if (!o.name) o.name = h.corpNm; } }));
   const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   list.forEach(o => {
     const seen = {};
     o.sanctions = o.sanctions.filter(x => { const k = [x.start, x.end, x.instt, x.doc].join('|'); if (seen[k]) return false; seen[k] = 1; return true; })
-      .sort((a, b) => String(b.start).localeCompare(String(a.start)));
+      .sort((a, b) => ((b.end >= today) - (a.end >= today)) || String(b.start).localeCompare(String(a.start)));
     o.active = o.sanctions.some(x => !x.end || x.end >= today);
   });
   list.sort((a, b) => (b.active - a.active) || (b.sanctions.length - a.sanctions.length));
@@ -768,28 +772,60 @@ function corpByName_(name) {
   return out;
 }
 
-/** 최근 3년 동안 시작된 부정당제재 목록(6시간 기억). 6개월씩 잘라 한꺼번에 부른다 */
-function sanctionList_() {
-  const cache = CacheService.getScriptCache(), hit = cache.get('unptList');
-  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
-  const now = new Date(), L = [];
-  for (let i = 0; i < 6; i++) {
-    const to = new Date(now - i * 182 * 864e5), from = new Date(now - (i + 1) * 182 * 864e5 + 6e4);
-    L.push({ url: USR + 'getUnptRsttCorpInfo02', params: { numOfRows: 999, pageNo: 1, inqryDiv: '2', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(to) } });
+/** 부정당제재 전체 이력(2016-09 이후, 끝난 제재 포함)을 '제재이력' 시트에 모아 두고 쓴다.
+ *  사업자번호 조회(조회구분 1)는 지금 유효한 제재만 주므로, 지난 이력은 제재시작일자 조회(조회구분 2)로 모은다.
+ *  처음·7일마다 전체를 다시 모으고, 12시간마다 최근 400일만 새로 받아 합친다 */
+const HIST_COLS = ['bizno', 'corpNm', 'start', 'end', 'instt', 'law', 'clause', 'reason', 'status', 'doc', 'days', 'posted'];
+let HIST = null;
+function history_(force) {
+  if (HIST && !force) return HIST;
+  const ss = book_();
+  let sh = ss.getSheetByName('제재이력');
+  if (!sh) { sh = ss.insertSheet('제재이력'); sh.appendRow(HIST_COLS); }
+  const old = rows_(sh).map(r => { const o = {}; HIST_COLS.forEach((k, i) => o[k] = String(r[i] == null ? '' : r[i])); return o; });
+  const age = Date.now() - Number(P.getProperty('histAt') || 0);
+  let list = old;
+  if (force || !old.length || age > 7 * 864e5) list = sanctionsBetween_(new Date(2016, 8, 1), new Date(), old);
+  else if (age > 12 * 3600e3) list = sanctionsBetween_(new Date(Date.now() - 400 * 864e5), new Date(), old);
+  if (list !== old) {
+    if (old.length) sh.getRange(2, 1, old.length, HIST_COLS.length).clearContent();
+    if (list.length) sh.getRange(2, 1, list.length, HIST_COLS.length).setValues(list.map(o => HIST_COLS.map(k => o[k] || '')));
   }
-  const out = []; let n = 0, errs = 0, lastErr = '';
-  const eat = res => res.forEach(r => { if (r.err) { errs++; lastErr = r.err; return; }
-    items_(r.body).forEach(x => { n++; if (x.bizno) out.push({ bizno: String(x.bizno), corpNm: x.corpNm || '' }); }); });
-  const first = fetchMany_(L), more = [];
-  eat(first);
-  first.forEach((r, i) => { const t = Number(r.body && r.body.totalCount || 0);
-    for (let pg = 2; pg <= Math.min(5, Math.ceil(t / 999)); pg++) more.push({ url: L[i].url, params: Object.assign({}, L[i].params, { pageNo: pg }) }); });
-  if (more.length) eat(fetchMany_(more));
-  TRACE.push({ api: '제재 목록(최근 3년)', n: n, calls: L.length, err: errs ? errs + '번 실패: ' + lastErr : '' });
-  const uniq = {}; out.forEach(x => uniq[x.bizno] = x);
-  const list = Object.keys(uniq).map(k => uniq[k]);
-  try { if (!errs) cache.put('unptList', JSON.stringify(list), 21600); } catch (e) {}
+  HIST = list;
   return list;
+}
+function sanctionsBetween_(from, to, old) {
+  const key = o => [o.bizno, o.start, o.end, o.instt, o.doc].join('|');
+  const map = {}; (old || []).forEach(o => map[key(o)] = o);
+  let W = Number(P.getProperty('histWin') || 92), got = 0, errs = 0, lastErr = '', calls = 0;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const L = [];
+    for (let e = +to; e > +from; e -= W * 864e5) {
+      const b = new Date(Math.max(+from, e - W * 864e5 + 6e4));
+      L.push({ url: USR + 'getUnptRsttCorpInfo02', params: { numOfRows: 999, pageNo: 1, inqryDiv: '2', inqryBgnDt: fmt_(b), inqryEndDt: fmt_(new Date(e)) } });
+    }
+    const eat = res => res.forEach(r => { if (r.err) { errs++; lastErr = r.err; return; }
+      items_(r.body).forEach(x => { if (!x.bizno) return; got++; const o = sanction_(x); o.bizno = String(x.bizno); o.corpNm = x.corpNm || ''; map[key(o)] = o; }); });
+    const first = fetchMany_(L), more = [];
+    calls += L.length; eat(first);
+    first.forEach((r, i) => { const t = Number(r.body && r.body.totalCount || 0);
+      for (let pg = 2; pg <= Math.min(10, Math.ceil(t / 999)); pg++) more.push({ url: L[i].url, params: Object.assign({}, L[i].params, { pageNo: pg }) }); });
+    if (more.length) { calls += more.length; eat(fetchMany_(more)); }
+    if (got || errs || W <= 31) break;
+    W = 31;   // 긴 기간에 0건을 주는 API가 있어 한 번은 짧게 잘라 다시
+  }
+  TRACE.push({ api: '제재 이력(' + W + '일씩)', n: got, calls: calls, err: errs ? errs + '번 실패: ' + lastErr : '' });
+  if (got) P.setProperty('histWin', String(W));
+  if (!errs && got) P.setProperty('histAt', String(Date.now()));
+  return Object.keys(map).map(k => map[k]);
+}
+
+/** 직접 실행(처음 한 번 권장): 부정당제재 이력을 시트에 모은다. 1분 안팎 걸려요 */
+function buildDebarHistory() {
+  TRACE = [];
+  const list = history_(true);
+  console.log(traceText_());
+  console.log('제재 이력 ' + list.length + '건을 「제재이력」 시트에 모았어요');
 }
 
 /** 직접 실행: 부정당업체 검색이 서버에서 어떻게 되는지 로그로 본다. 이름을 바꿔 실행해도 돼요 */
