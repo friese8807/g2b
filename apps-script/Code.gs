@@ -31,6 +31,8 @@ const DEFAULTS = {
 };
 // 예전 설정(키워드 감시)에서 넘어올 때 한 번: 키워드 알림은 쓰지 않는다
 const RULE_VER = '2';
+// 사용자정보서비스: 조달업체 기본정보(업체명→사업자번호)·부정당제재업체 조회
+const USR = 'https://apis.data.go.kr/1230000/ao/UsrInfoService02/';
 const KIND_NM = { Servc: '용역', Thng: '물품', Cnstwk: '공사', Frgcpt: '외자' };
 
 // ════════════════════════ 앱 요청 처리 ════════════════════════
@@ -69,6 +71,7 @@ function handle_(req) {
     if (a === 'saveSettings') { saveSettings_(req.settings || {}); return ok_(snapshot_()); }
     if (a === 'read') { markRead_(req.all ? null : req.keys || []); return ok_({ done: true }); }
     if (a === 'detail') return ok_(detail_(req.key, req.no, req.ord));
+    if (a === 'debar') return ok_(debar_(String(req.text || '')));
     if (a === 'notice') return ok_(notice_(String(req.no || ''), req.kind));
     if (a === 'test') { const sent = testNotify(); const sn = snapshot_(); sn.sent = sent; return ok_(sn); }
     if (a === 'checkNow') { const n = check_(true); const s = snapshot_(); s.newCount = n; return ok_(s); }
@@ -679,6 +682,125 @@ function widget_() {
   };
 }
 
+// ════════════════════════ 부정당업체 검색 ════════════════════════
+
+/** 업체 이름(또는 사업자번호 10자리)으로 부정당제재 여부를 확인한다.
+ *  이름이면 ① 조달업체 기본정보에서 사업자번호를 찾고 ② 그 번호마다 제재 내역을 조회한다.
+ *  ③ 최근 3년 제재 목록에서 이름이 맞는 업체도 함께 붙인다(기본정보에 없는 업체 대비) */
+function debar_(text) {
+  text = String(text || '').trim();
+  if (!text) throw new Error('업체 이름이나 사업자번호를 넣어 주세요');
+  TRACE = [];
+  const digits = text.replace(/[^\d]/g, ''), byNo = {};
+  const put = (bizno, info) => {
+    bizno = String(bizno || '').replace(/[^\d]/g, ''); if (bizno.length !== 10) return null;
+    const o = byNo[bizno] = byNo[bizno] || { bizno: bizno, name: '', ceo: '', addr: '', kind: '', sanctions: [] };
+    Object.keys(info || {}).forEach(k => { if (info[k] && !o[k]) o[k] = info[k]; });
+    return o;
+  };
+  const isNo = /^\d{10}$/.test(digits) && !/[가-힣A-Za-z]/.test(text);
+  if (isNo) put(digits, {});
+  else {
+    corpByName_(text).forEach(c => put(c.bizno, { name: c.corpNm, ceo: c.ceoNm, addr: [c.rgnNm || '', c.adrs || ''].join(' ').trim(), kind: c.corpBsnsDivNm }));
+    // 제재 목록에서 이름으로 직접 찾기
+    sanctionList_().filter(r => coNorm_(r.corpNm).indexOf(coNorm_(text)) >= 0).forEach(r => put(r.bizno, { name: r.corpNm }));
+  }
+  // 이름이 정확히 같은 업체 먼저, 최대 15곳
+  const key = coNorm_(text);
+  let list = Object.keys(byNo).map(k => byNo[k])
+    .sort((a, b) => (coNorm_(b.name) === key) - (coNorm_(a.name) === key) || String(a.name).length - String(b.name).length).slice(0, 15);
+  // 사업자번호마다 제재 내역 (조회 시점에 유효한 제재)
+  const res = fetchMany_(list.map(o => ({ url: USR + 'getUnptRsttCorpInfo02', params: { numOfRows: 100, pageNo: 1, inqryDiv: '1', bizno: o.bizno } })));
+  let errs = 0, lastErr = '';
+  res.forEach((r, i) => {
+    if (r.err) { errs++; lastErr = r.err; list[i].error = '제재 조회 실패'; return; }
+    items_(r.body).forEach(x => { list[i].name = list[i].name || x.corpNm || ''; list[i].sanctions.push(sanction_(x)); });
+  });
+  TRACE.push({ api: '제재 조회(사업자번호)', n: list.length, calls: res.length, err: errs ? errs + '번 실패: ' + lastErr : '' });
+  // 사업자번호로 넣었는데 이름을 모르면 기본정보에서 채운다
+  if (isNo && list[0] && !list[0].ceo) {
+    try { const c = items_(call_(USR + 'getPrcrmntCorpBasicInfo02', { numOfRows: 1, pageNo: 1, inqryDiv: '3', bizno: digits }))[0];
+      if (c) Object.assign(list[0], { name: list[0].name || c.corpNm, ceo: c.ceoNm, addr: [c.rgnNm || '', c.adrs || ''].join(' ').trim(), kind: c.corpBsnsDivNm }); } catch (e) {}
+  }
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  list.forEach(o => {
+    const seen = {};
+    o.sanctions = o.sanctions.filter(x => { const k = [x.start, x.end, x.instt, x.doc].join('|'); if (seen[k]) return false; seen[k] = 1; return true; })
+      .sort((a, b) => String(b.start).localeCompare(String(a.start)));
+    o.active = o.sanctions.some(x => !x.end || x.end >= today);
+  });
+  list.sort((a, b) => (b.active - a.active) || (b.sanctions.length - a.sanctions.length));
+  return { items: list, today: today, note: list.length ? '' : traceText_() };
+}
+
+function items_(body) { const it = body && body.items; return Array.isArray(it) ? it : it && it.item ? [].concat(it.item) : []; }
+
+function sanction_(x) {
+  return { doc: x.unptRsttDocNm || '', start: String(x.rsttBgnDate || '').slice(0, 10), end: String(x.rsttEndDate || '').slice(0, 10),
+    instt: x.insttNm || '', law: x.lawordNm || '', clause: x.lawordArtclClause || '', reason: x.lawordArtclClauseCdNm || x.enfcPrvNm || '',
+    status: x.rsttProgrsNm || '', months: x.rsttPrdMonthNum || '', days: x.rsttPrdDayNum || '', posted: String(x.ntfcnDt || '').slice(0, 10) };
+}
+
+/** 업체명 → 조달업체 기본정보 목록. 업체명은 조회구분 1(등록일)·2(변경일)에서만 받으므로 기간을 아주 길게 준다.
+ *  입찰공고 API처럼 긴 기간에 0건을 줄 수 있어, 0건이면 5년씩 잘라 다시 부른다 */
+function corpByName_(name) {
+  const now = new Date(), clean = String(name).replace(/\(주\)|㈜|주식회사|\(유\)|유한회사/g, '').trim();
+  const names = [name]; if (clean && clean !== name) names.push(clean);
+  const seen = {}, out = [];
+  const take = (res, label, calls) => {
+    let n = 0, errs = 0, lastErr = '';
+    res.forEach(r => { if (r.err) { errs++; lastErr = r.err; return; }
+      items_(r.body).forEach(c => { const b = String(c.bizno || ''); n++; if (b && !seen[b]) { seen[b] = 1; out.push(c); } }); });
+    TRACE.push({ api: label, n: n, calls: calls, err: errs ? errs + '번 실패: ' + lastErr : '' });
+  };
+  const call = (div, from, to) => names.map(nm => ({ url: USR + 'getPrcrmntCorpBasicInfo02', params: { numOfRows: 100, pageNo: 1, inqryDiv: div, inqryBgnDt: fmt_(from), inqryEndDt: fmt_(to), corpNm: nm } }));
+  const memo = P.getProperty('corpWin');   // 되는 방식 기억: 'all' 또는 '5y'
+  if (memo !== '5y') {
+    const L = call('1', new Date(1990, 0, 1), now).concat(call('2', new Date(1990, 0, 1), now));
+    take(fetchMany_(L), '업체 기본정보(전체 기간)', L.length);
+    if (out.length) { P.setProperty('corpWin', 'all'); return out; }
+  }
+  const L = [];
+  for (let y = now.getFullYear(); y >= 1995; y -= 5) L.push.apply(L, call('1', new Date(y - 4, 0, 1), y === now.getFullYear() ? now : new Date(y, 11, 31, 23, 59)));
+  take(fetchMany_(L), '업체 기본정보(5년씩)', L.length);
+  if (out.length) P.setProperty('corpWin', '5y');
+  else if (memo === '5y') P.deleteProperty('corpWin');
+  return out;
+}
+
+/** 최근 3년 동안 시작된 부정당제재 목록(6시간 기억). 6개월씩 잘라 한꺼번에 부른다 */
+function sanctionList_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get('unptList');
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const now = new Date(), L = [];
+  for (let i = 0; i < 6; i++) {
+    const to = new Date(now - i * 182 * 864e5), from = new Date(now - (i + 1) * 182 * 864e5 + 6e4);
+    L.push({ url: USR + 'getUnptRsttCorpInfo02', params: { numOfRows: 999, pageNo: 1, inqryDiv: '2', inqryBgnDt: fmt_(from), inqryEndDt: fmt_(to) } });
+  }
+  const out = []; let n = 0, errs = 0, lastErr = '';
+  const eat = res => res.forEach(r => { if (r.err) { errs++; lastErr = r.err; return; }
+    items_(r.body).forEach(x => { n++; if (x.bizno) out.push({ bizno: String(x.bizno), corpNm: x.corpNm || '' }); }); });
+  const first = fetchMany_(L), more = [];
+  eat(first);
+  first.forEach((r, i) => { const t = Number(r.body && r.body.totalCount || 0);
+    for (let pg = 2; pg <= Math.min(5, Math.ceil(t / 999)); pg++) more.push({ url: L[i].url, params: Object.assign({}, L[i].params, { pageNo: pg }) }); });
+  if (more.length) eat(fetchMany_(more));
+  TRACE.push({ api: '제재 목록(최근 3년)', n: n, calls: L.length, err: errs ? errs + '번 실패: ' + lastErr : '' });
+  const uniq = {}; out.forEach(x => uniq[x.bizno] = x);
+  const list = Object.keys(uniq).map(k => uniq[k]);
+  try { if (!errs) cache.put('unptList', JSON.stringify(list), 21600); } catch (e) {}
+  return list;
+}
+
+/** 직접 실행: 부정당업체 검색이 서버에서 어떻게 되는지 로그로 본다. 이름을 바꿔 실행해도 돼요 */
+function debugDebar(name) {
+  name = name || '올포랜드';
+  const r = debar_(name);
+  console.log(traceText_());
+  r.items.forEach(o => console.log([o.bizno, o.name, o.ceo, o.active ? '제재 중' : o.sanctions.length ? '지난 제재 ' + o.sanctions.length + '건' : '제재 없음'].join(' | ')));
+  if (!r.items.length) console.log('찾은 업체가 없어요');
+}
+
 // ════════════════════════ 나라장터 API ════════════════════════
 
 function fetchAll_(url, params, rows, pages) {
@@ -794,6 +916,9 @@ function testApi() {
   console.log('개찰결과 API 정상 · 최근 24시간 ' + items.length + '건(첫 페이지)');
   items.forEach(r => console.log([r.opengDt, r.progrsDivCdNm, r.bidNtceNo, r.bidNtceNm].join(' | ')));
   const found = search_('', 3, ['Servc']);
+  try { const c = call_(USR + 'getUnptRsttCorpInfo02', { numOfRows: 1, pageNo: 1, inqryDiv: '2', inqryBgnDt: fmt_(new Date(now - 30 * 864e5)), inqryEndDt: fmt_(now) });
+    console.log('부정당업체 API 정상 · 최근 30일 제재 ' + (c.totalCount || 0) + '건'); }
+  catch (e) { console.log('부정당업체 API 오류: ' + e.message + ' → data.go.kr에서 「조달청_나라장터 사용자정보 서비스」 활용신청을 확인하세요'); }
   console.log('입찰공고 검색 API 정상 · 최근 3일 ' + found.total + '건 (' + (P.getProperty('bidApi') === '1' ? '옛 주소' : '새 주소 02') + ')');
 }
 
