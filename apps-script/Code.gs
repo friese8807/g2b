@@ -831,7 +831,16 @@ function fetchMany_(list) {
   for (let i = 0; i < list.length; i += 10) {
     const part = list.slice(i, i + 10);
     count_(part.length);
-    const res = UrlFetchApp.fetchAll(part.map(x => ({ url: url_(x.url, x.params), muteHttpExceptions: true })));
+    let res;
+    try { res = UrlFetchApp.fetchAll(part.map(x => ({ url: url_(x.url, x.params), muteHttpExceptions: true }))); }
+    catch (e) {
+      // 한 건이라도 시간 초과면 묶음 전체가 예외 → 하나씩 다시 부른다
+      part.forEach(x => {
+        try { out.push({ body: call_(x.url, x.params) }); }
+        catch (e2) { if (/LIMITED|한도/i.test(String(e2.message))) throw e2; out.push({ err: String(e2.message || e2) }); }
+      });
+      continue;
+    }
     res.forEach((r, k) => {
       try { out.push({ body: parse_(r, part[k].url) }); }
       catch (e) {
@@ -846,13 +855,23 @@ function fetchMany_(list) {
 function call_(url, params) {
   const full = url_(url, params);
   count_(1);
-  let res;
+  let res = null, lastErr = null;
   for (let i = 0; i < 3; i++) {
-    res = UrlFetchApp.fetch(full, { muteHttpExceptions: true });
-    if (res.getResponseCode() < 500) break;
-    Utilities.sleep(1500 * (i + 1));
+    try { res = UrlFetchApp.fetch(full, { muteHttpExceptions: true }); lastErr = null; }
+    catch (e) { res = null; lastErr = e; }               // 시간 초과·연결 끊김은 예외로 온다 → 잠시 뒤 다시
+    if (res && res.getResponseCode() < 500) break;
+    if (i < 2) Utilities.sleep(1500 * (i + 1));
   }
+  if (!res) throw netErr_(lastErr, url);
   return parse_(res, url);
+}
+
+/** 네트워크 오류를 쉬운 말로 바꾸고, 메시지에 섞인 인증키(serviceKey=…)는 지운다 */
+function netErr_(e, url) {
+  const m = String(e && e.message || e).replace(/serviceKey=[^&\s]+/gi, 'serviceKey=***');
+  const op = String(url || '').split('/').pop();
+  if (/시간 초과|timed? ?out|Timeout/i.test(m)) return new Error('나라장터 응답 시간 초과 (' + op + ')');
+  return new Error('나라장터 연결 실패 (' + op + '): ' + m.slice(0, 100));
 }
 
 function parse_(res, url) {
@@ -912,14 +931,20 @@ function setup() {
 /** ② 키 확인: 최근 24시간 용역 개찰결과 몇 건을 로그에 찍음 */
 function testApi() {
   const now = new Date();
-  const items = fetchAll_(SCRS + 'getOpengResultListInfoServcPPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(new Date(now - 864e5)), inqryEndDt: fmt_(now) }, 10, 1);
-  console.log('개찰결과 API 정상 · 최근 24시간 ' + items.length + '건(첫 페이지)');
-  items.forEach(r => console.log([r.opengDt, r.progrsDivCdNm, r.bidNtceNo, r.bidNtceNm].join(' | ')));
-  const found = search_('', 3, ['Servc']);
+  // 하나가 실패해도 나머지는 계속 확인한다
+  try {
+    const items = fetchAll_(SCRS + 'getOpengResultListInfoServcPPSSrch', { inqryDiv: '2', inqryBgnDt: fmt_(new Date(now - 864e5)), inqryEndDt: fmt_(now) }, 10, 1);
+    console.log('개찰결과 API 정상 · 최근 24시간 ' + items.length + '건(첫 페이지)');
+    items.forEach(r => console.log([r.opengDt, r.progrsDivCdNm, r.bidNtceNo, r.bidNtceNm].join(' | ')));
+  } catch (e) { console.log('개찰결과 API 오류: ' + e.message); }
+  try {
+    const found = search_('', 3, ['Servc']);
+    console.log('입찰공고 검색 API 정상 · 최근 3일 ' + found.total + '건 (' + (P.getProperty('bidApi') === '1' ? '옛 주소' : '새 주소 02') + ')' + (found.total ? '' : ' · ' + found.note));
+  } catch (e) { console.log('입찰공고 검색 API 오류: ' + e.message); }
   try { const c = call_(USR + 'getUnptRsttCorpInfo02', { numOfRows: 1, pageNo: 1, inqryDiv: '2', inqryBgnDt: fmt_(new Date(now - 30 * 864e5)), inqryEndDt: fmt_(now) });
     console.log('부정당업체 API 정상 · 최근 30일 제재 ' + (c.totalCount || 0) + '건'); }
   catch (e) { console.log('부정당업체 API 오류: ' + e.message + ' → data.go.kr에서 「조달청_나라장터 사용자정보 서비스」 활용신청을 확인하세요'); }
-  console.log('입찰공고 검색 API 정상 · 최근 3일 ' + found.total + '건 (' + (P.getProperty('bidApi') === '1' ? '옛 주소' : '새 주소 02') + ')');
+  console.log('※ "시간 초과"는 나라장터 서버가 잠깐 느린 거예요. 1~2분 뒤 다시 실행해 보세요');
 }
 
 /** ③ 시험 알림: 최근 개찰결과 1건으로 메일·텔레그램을 보내 봄 (결과 목록에는 저장하지 않음) */
