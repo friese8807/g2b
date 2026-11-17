@@ -233,6 +233,27 @@ table.bd tr.rival td{background:var(--p-blue);color:var(--p-blue-ink)}
 .kv dt{background:var(--box);color:var(--muted);font-weight:600;white-space:nowrap;overflow-wrap:normal}
 .kv dd{font-weight:600}
 .t-urgent{background:var(--p-stop);color:var(--p-stop-ink)}
+/* 부정당업체 */
+.t-ok{background:var(--p-go);color:var(--p-go-ink)}
+.mode{margin-bottom:10px}
+.verdict{margin-top:14px;border-radius:18px;padding:16px;text-align:center;cursor:pointer}
+.verdict.v-ok{background:var(--p-go);color:var(--p-go-ink)}
+.verdict.v-ban{background:var(--p-stop);color:var(--p-stop-ink)}
+.verdict.v-past{background:var(--p-warn);color:var(--p-warn-ink)}
+.verdict .ic{width:46px;height:46px;margin:0 auto 6px;border-radius:50%;background:rgba(255,255,255,.55);display:grid;place-items:center}
+.verdict .ic svg{width:26px;height:26px}
+.verdict .big{font-size:22px;font-weight:800}
+.verdict .who{font-size:15px;font-weight:700;margin-top:6px;word-break:keep-all}
+.verdict .sm{font-size:12.5px;opacity:.85;margin-top:3px}
+.verdict .why{margin-top:10px;background:rgba(255,255,255,.5);border-radius:10px;padding:8px 10px;font-size:12.5px;text-align:left;line-height:1.5;word-break:keep-all}
+@media (prefers-color-scheme:dark){.verdict .ic,.verdict .why{background:rgba(0,0,0,.22)}}
+.crow{display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid var(--line);cursor:pointer}
+.crow:first-child{border-top:0}
+.crow .nm{flex:1;min-width:0}
+.crow .nm b{display:block;font-size:14.5px;word-break:keep-all}
+.crow .nm small{display:block;font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clist{background:var(--solid);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+
 /* 상세 시트 */
 .dt h2{margin:6px 0 4px;font-size:17px;line-height:1.38;color:var(--title);word-break:keep-all}
 .dt .org{font-size:13px;color:var(--muted)}
@@ -553,7 +574,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794811724';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794909505';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -661,6 +682,7 @@ async function demoApi(action, p) {
   if (action === 'read') { d.results.forEach(r => r.read = true); return d; }
   if (action === 'detail') return (d.results.find(r => r.key === p.key) || {}).bidders || [];
   if (action === 'test') return Object.assign({}, d, { sent: { mail: true, tg: true } });
+  if (action === 'debar') return demoDebar(p.text);
   if (action === 'notice') { const n = DEMO.notices.find(x => x.no === p.no); return n && n.info ? { info: n.info, url: '', urgent: !!n.urgent } : { info: [], url: '', urgent: false }; }
   return d;
 }
@@ -745,6 +767,7 @@ function noticeCard(n) {
 }
 function renderSearch() {
   const q = S.q, set = S.d?.settings || {};
+  if (q.mode === 'debar') return modeSeg() + `<form class="sbox" id="dform"><input id="qtext" type="search" enterkeyhint="search" placeholder="업체 이름 또는 사업자번호" value="${esc(q.dtext || '')}" autocomplete="off"><button class="btn" type="submit">확인</button></form>` + debarList();
   let list = '';
   if (S.found === 'busy') list = '<div class="ak-empty">찾는 중이에요…</div>';
   else if (S.found?.error) list = `<div class="ak-empty">${esc(S.found.error)}<br><button data-act="search" type="button">다시 시도</button></div>`;
@@ -752,7 +775,7 @@ function renderSearch() {
     + (S.found.items.length ? '<div class="bcl">' + S.found.items.map(noticeCard).join('') + '</div>'
       : '<div class="ak-empty">찾은 공고가 없어요. 낱말을 줄이거나 기간을 늘려 보세요. 공고번호(예: R26BK01777014)로도 찾을 수 있어요.' + (S.found.note ? '<br><small style="display:block;margin-top:10px;font-size:11.5px">' + esc(S.found.note) + '</small>' : '') + '</div>');
   else list = `<p class="note">사업명이나 기관 이름으로 나라장터 입찰공고를 찾아요.<br>별표를 누르면 그 사업의 개찰결과가 올라오는 즉시 알려 드려요.</p>`;
-  return `<form class="sbox" id="sform"><input id="qtext" type="search" enterkeyhint="search" placeholder="사업명·기관·공고번호" value="${esc(q.text)}" autocomplete="off"><button class="btn" type="submit">검색</button></form>
+  return modeSeg() + `<form class="sbox" id="sform"><input id="qtext" type="search" enterkeyhint="search" placeholder="사업명·기관·공고번호" value="${esc(q.text)}" autocomplete="off"><button class="btn" type="submit">검색</button></form>
     <div class="chips">${[7, 30, 90].map(n => `<button class="chip ${q.days === n ? 'on' : ''}" data-days="${n}" type="button">${n}일</button>`).join('')}
       <span style="width:6px"></span>${KINDS.map(([k, l]) => `<button class="chip ${q.kinds.includes(k) ? 'on' : ''}" data-kind="${k}" type="button">${l}</button>`).join('')}</div>
     ${list}`;
@@ -763,6 +786,66 @@ async function doSearch() {
   try { S.found = await api('search', { text: S.q.text, days: S.q.days, kinds: S.q.kinds }); }
   catch (e) { S.found = { error: e.message || '찾지 못했어요' }; }
   if (tabs.current === 'search') tabs.go('search', 0);
+}
+
+
+/* ───────── 부정당업체 ───────── */
+function demoDebar(text) {
+  const t = AppKit.kstDate(), q = coShort(text).replace(/\s/g, '').replace(/-/g, '');
+  const C = [
+    { bizno: '2148812345', name: '(주)지오스토리', ceo: '김OO', addr: '서울특별시 금천구 가산디지털1로', kind: '용역', sanctions: [] },
+    { bizno: '1078654321', name: '지오시스템(주)', ceo: '박OO', addr: '경기도 성남시 분당구', kind: '물품·용역',
+      sanctions: [{ doc: '부정당업자 입찰참가자격 제한', start: '2025-03-10', end: '2025-09-09', instt: '한국토지주택공사', law: '공공기관의 운영에 관한 법률', clause: '제39조제2항', reason: '계약을 이행하지 아니한 자', status: '제재종료', months: '6', days: '184' }] },
+    { bizno: '6058177001', name: '(주)지오나라공간', ceo: '이OO', addr: '부산광역시 해운대구', kind: '용역',
+      sanctions: [{ doc: '부정당업자 제재처분 통보', start: AppKit.addDays(t, -40), end: AppKit.addDays(t, 140), instt: '조달청', law: '국가를 당사자로 하는 계약에 관한 법률', clause: '제27조제1항제2호', reason: '경쟁입찰에서 담합을 주도한 자', status: '제재중', months: '6', days: '181' }] },
+  ];
+  const hit = C.filter(c => (c.name + c.bizno).replace(/\(주\)|\s/g, '').includes(q));
+  hit.forEach(c => c.active = c.sanctions.some(x => x.end >= t));
+  hit.sort((a, b) => b.active - a.active);
+  return { items: hit, today: t, note: '' };
+}
+const bizFmt = b => String(b || '').replace(/^(\d{3})(\d{2})(\d{5})$/, '$1-$2-$3');
+const debarState = o => o.error ? ['t-dash', '조회 실패'] : o.active ? ['t-stop', '제재 중'] : o.sanctions.length ? ['t-warn', '지난 제재'] : ['t-ok', '제재 없음'];
+const period = x => (x.start || '?').replace(/-/g, '.') + ' ~ ' + (x.end || '').replace(/-/g, '.');
+function modeSeg() {
+  return `<div class="seg mode"><button class="${S.q.mode !== 'debar' ? 'on' : ''}" data-mode="notice" type="button">입찰공고</button><button class="${S.q.mode === 'debar' ? 'on' : ''}" data-mode="debar" type="button">부정당업체</button></div>`;
+}
+async function doDebar() {
+  const el = document.getElementById('qtext'); if (el) S.q.dtext = el.value.trim();
+  if (!S.q.dtext) return AppKit.toast('업체 이름이나 사업자번호를 넣어 주세요');
+  LS.set('q', S.q); S.dfound = 'busy'; tabs.go('search', 0);
+  try { S.dfound = await api('debar', { text: S.q.dtext }); }
+  catch (e) { S.dfound = { error: e.message || '찾지 못했어요' }; }
+  if (tabs.current === 'search') tabs.go('search', 0);
+}
+function openCorp(bizno) {
+  const o = (S.dfound?.items || []).find(x => x.bizno === bizno); if (!o) return;
+  const [cls, lab] = debarState(o);
+  document.getElementById('sheetBody').innerHTML = `<div class="dt"><div class="tags" style="display:flex;gap:5px"><span class="tag ${cls}">${lab}</span>${o.kind ? '<span class="tag">' + esc(o.kind) + '</span>' : ''}</div>
+    <h2>${nm(o.name || '(이름 없음)')}</h2><div class="org">사업자번호 ${bizFmt(o.bizno)}${o.ceo ? ' · 대표 ' + esc(o.ceo) : ''}</div>
+    ${o.addr ? `<dl class="facts"><dt>주소</dt><dd>${esc(o.addr)}</dd></dl>` : ''}
+    ${o.sanctions.length ? o.sanctions.map((x, i) => `<div class="kv"><h4>제재 ${o.sanctions.length > 1 ? i + 1 : ''} ${x.end >= S.dfound.today ? '<span class="tag t-stop">진행 중</span>' : '<span class="tag">끝남</span>'}</h4><dl>
+      <dt>제재기간</dt><dd>${period(x)}${x.days ? ' (' + esc(x.days) + '일)' : ''}</dd><dt>제재기관</dt><dd>${esc(x.instt || '-')}</dd>
+      <dt>사유</dt><dd>${esc(x.reason || '-')}</dd><dt>근거법령</dt><dd>${esc(x.law || '-')}${x.clause ? ' ' + esc(x.clause) : ''}</dd>
+      ${x.doc ? `<dt>문서명</dt><dd>${esc(x.doc)}</dd>` : ''}${x.status ? `<dt>상태</dt><dd>${esc(x.status)}</dd>` : ''}</dl></div>`).join('')
+      : '<div class="ak-empty">나라장터에 등록된 부정당제재가 없어요.</div>'}
+    <p class="note" style="text-align:center;word-break:keep-all;text-wrap:balance">조회 시점의 나라장터(조달청) 자료예요. 입찰 전에는 나라장터에서 한 번 더 확인하세요.</p></div>`;
+  sheet.open();
+}
+
+function debarList() {
+  const F = S.dfound;
+  if (F === 'busy') return '<div class="ak-empty">사업자번호를 찾고 제재 여부를 확인하는 중이에요…</div>';
+  if (F?.error) return `<div class="ak-empty">${esc(F.error)}<br><button data-act="debar" type="button">다시 시도</button></div>`;
+  if (!F) return `<p class="note">업체 이름을 넣으면 사업자번호를 찾아 부정당제재 여부를 바로 알려 드려요. 사업자번호(10자리)를 넣어도 돼요.</p>`;
+  if (!F.items.length) return '<div class="ak-empty">찾은 업체가 없어요. (주)·주식회사를 빼거나 사업자번호로 찾아 보세요.' + (F.note ? '<br><small style="display:block;margin-top:10px;font-size:11.5px">' + esc(F.note) + '</small>' : '') + '</div>';
+  const [o, ...rest] = F.items, x = o.sanctions[0];
+  const v = o.active ? ['v-ban', '부정당제재 중', '<path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>'] : o.sanctions.length ? ['v-past', '지금은 제재 없음', '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>'] : ['v-ok', '제재 없음', '<path d="m6 12.5 4 4 8-9"/>'];
+  return `<div class="verdict ${v[0]}" data-corp="${o.bizno}"><div class="ic"><svg class="ak-ic" viewBox="0 0 24 24">${v[2]}</svg></div><div class="big">${v[1]}</div>
+    <div class="who">${nm(o.name)}</div><div class="sm num">${bizFmt(o.bizno)}${o.ceo ? ' · 대표 ' + esc(o.ceo) : ''}</div>
+    ${x ? `<div class="why">${o.active ? '' : '지난 제재 · '}${period(x)}<br>${esc(x.instt || '')} · ${esc(x.reason || x.clause || '')}</div>` : ''}</div>
+    ${rest.length ? `<div class="sec">비슷한 이름 <span class="n">${rest.length}곳</span></div><div class="clist">` + rest.map(r => { const [cls, lab] = debarState(r);
+      return `<div class="crow" data-corp="${r.bizno}"><div class="nm"><b>${nm(r.name)}</b><small class="num">${bizFmt(r.bizno)}${r.ceo ? ' · ' + esc(r.ceo) : ''}</small></div><span class="tag ${cls}">${lab}</span></div>`; }).join('') + '</div>' : ''}`;
 }
 
 /* ───────── 감시 탭 ───────── */
@@ -909,6 +992,7 @@ document.addEventListener('change', e => {
 document.addEventListener('submit', async e => {
   e.preventDefault();
   if (e.target.id === 'sform') { document.activeElement?.blur(); return doSearch(); }
+  if (e.target.id === 'dform') { document.activeElement?.blur(); return doDebar(); }
   const k = e.target.dataset.addto;
   if (k) {
     const v = e.target.querySelector('input').value.trim(); if (!v) return;
@@ -930,6 +1014,8 @@ document.addEventListener('click', async e => {
     if (!item) return AppKit.toast('공고 정보를 찾지 못했어요. 다시 검색해 주세요');
     await mutate('watch', { item }, '감시에 넣었어요. 개찰결과가 올라오면 알려 드릴게요'); return after();
   }
+  const md = t.closest('[data-mode]'); if (md) { if (S.q.mode !== md.dataset.mode) { S.q.mode = md.dataset.mode; LS.set('q', S.q); tabs.go('search', 0); } return; }
+  const cp = t.closest('[data-corp]'); if (cp) return openCorp(cp.dataset.corp);
   const nt = t.closest('[data-notice]'); if (nt) return openNotice(nt.dataset.notice);
   const dy = t.closest('[data-days]'); if (dy) { S.q.days = +dy.dataset.days; LS.set('q', S.q); return S.q.text || S.found ? doSearch() : tabs.go('search', 0); }
   const kd = t.closest('[data-kind]');
@@ -945,6 +1031,7 @@ document.addEventListener('click', async e => {
   const a = t.closest('[data-act]')?.dataset.act;
   if (a === 'readAll') { S.d.results.forEach(r => r.read = true); setData(S.d); return api('read', { all: true }).catch(() => {}); }
   if (a === 'search') return doSearch();
+  if (a === 'debar') return doDebar();
   if (a === 'test') {
     const d = await mutate('test', {}); if (!d) return;
     const t = d.sent || {}, ok = [t.mail && 'Gmail', t.tg && '텔레그램'].filter(Boolean);
