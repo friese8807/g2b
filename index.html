@@ -234,19 +234,28 @@ table.bd tr.rival td{background:var(--p-blue);color:var(--p-blue-ink)}
 .kv dd{font-weight:600}
 .t-urgent{background:var(--p-stop);color:var(--p-stop-ink)}
 /* 부정당업체 */
+.vC{margin-top:14px;border-radius:20px;padding:20px 16px 6px;text-align:center;cursor:pointer}
+.vC.v-ban{background:var(--p-stop);color:var(--p-stop-ink)}.vC.v-past{background:var(--p-warn);color:var(--p-warn-ink)}.vC.v-ok{background:var(--p-go);color:var(--p-go-ink)}
+.vC .ringbox{position:relative;width:132px;height:132px;margin:0 auto}
+.vC .ring{width:132px;height:132px}.vC .ring circle{fill:none;stroke-width:11}.vC .ring .bg{stroke:currentColor;opacity:.15}.vC .ring .fg{stroke:currentColor;stroke-linecap:round}
+.vC .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.vC .ctr b{font-size:36px;font-weight:800;line-height:1}.vC .ctr small{font-size:12px;font-weight:700;margin-top:3px}
+.vC .st{font-size:22px;font-weight:800;margin-top:8px}.vC .who{font-size:16px;font-weight:700;margin-top:4px;word-break:keep-all}.vC .sm{font-size:12.5px;opacity:.8;margin-top:2px}
+.vC .pills{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px}
+.vC .pills span{background:rgba(255,255,255,.6);border-radius:999px;padding:6px 12px;font-size:13.5px;font-weight:700}
+@media (prefers-color-scheme:dark){.vC .pills span{background:rgba(0,0,0,.25)}}
+.vC .more{color:inherit;opacity:.75}
+
+.hist{background:var(--solid);border:1px solid var(--line);border-radius:16px;padding:4px 14px}
+.hi{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line);cursor:pointer;position:relative}
+.hi:first-child{border-top:0}
+.hi>i{flex:none;width:10px;height:10px;border-radius:50%;background:var(--muted);opacity:.5}
+.hi.on>i{background:var(--p-stop-ink);opacity:1;box-shadow:0 0 0 4px var(--p-stop)}
+.hi .tx{flex:1;min-width:0}.hi .tx b{display:block;font-size:14.5px}.hi.on .tx b{color:var(--p-stop-ink)}
+.hi .tx small{display:block;font-size:12px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vA .more,.vB .more,.vC .more{text-align:center;font-size:12.5px;color:var(--muted);padding:10px 0 12px}
+
 .t-ok{background:var(--p-go);color:var(--p-go-ink)}
 .mode{margin-bottom:10px}
-.verdict{margin-top:14px;border-radius:18px;padding:16px;text-align:center;cursor:pointer}
-.verdict.v-ok{background:var(--p-go);color:var(--p-go-ink)}
-.verdict.v-ban{background:var(--p-stop);color:var(--p-stop-ink)}
-.verdict.v-past{background:var(--p-warn);color:var(--p-warn-ink)}
-.verdict .ic{width:46px;height:46px;margin:0 auto 6px;border-radius:50%;background:rgba(255,255,255,.55);display:grid;place-items:center}
-.verdict .ic svg{width:26px;height:26px}
-.verdict .big{font-size:22px;font-weight:800}
-.verdict .who{font-size:15px;font-weight:700;margin-top:6px;word-break:keep-all}
-.verdict .sm{font-size:12.5px;opacity:.85;margin-top:3px}
-.verdict .why{margin-top:10px;background:rgba(255,255,255,.5);border-radius:10px;padding:8px 10px;font-size:12.5px;text-align:left;line-height:1.5;word-break:keep-all}
-@media (prefers-color-scheme:dark){.verdict .ic,.verdict .why{background:rgba(0,0,0,.22)}}
 .crow{display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid var(--line);cursor:pointer}
 .crow:first-child{border-top:0}
 .crow .nm{flex:1;min-width:0}
@@ -574,7 +583,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794909505';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794910803';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -797,7 +806,9 @@ function demoDebar(text) {
     { bizno: '1078654321', name: '지오시스템(주)', ceo: '박OO', addr: '경기도 성남시 분당구', kind: '물품·용역',
       sanctions: [{ doc: '부정당업자 입찰참가자격 제한', start: '2025-03-10', end: '2025-09-09', instt: '한국토지주택공사', law: '공공기관의 운영에 관한 법률', clause: '제39조제2항', reason: '계약을 이행하지 아니한 자', status: '제재종료', months: '6', days: '184' }] },
     { bizno: '6058177001', name: '(주)지오나라공간', ceo: '이OO', addr: '부산광역시 해운대구', kind: '용역',
-      sanctions: [{ doc: '부정당업자 제재처분 통보', start: AppKit.addDays(t, -40), end: AppKit.addDays(t, 140), instt: '조달청', law: '국가를 당사자로 하는 계약에 관한 법률', clause: '제27조제1항제2호', reason: '경쟁입찰에서 담합을 주도한 자', status: '제재중', months: '6', days: '181' }] },
+      sanctions: [{ doc: '부정당업자 제재처분 통보', start: AppKit.addDays(t, -335), end: AppKit.addDays(t, 73), instt: '해양수산부 국립해양조사원', law: '국가를 당사자로 하는 계약에 관한 법률', clause: '제27조제1항제6호', reason: '입찰·낙찰 또는 계약의 체결·이행과 관련하여 관계 공무원(제29조제1항에 따른 국가계약분쟁조정위원회, 「건설기술 진흥법」에 따른 중앙건설기술심의위원회·특별건설기술심의위원회 및 기술자문위원회, 그 밖에 대통령령으로 정하는 위원회의 위원을 포함한다)에게 뇌물을 준 자', status: '제재중', months: '6', days: '181' },
+        { doc: '입찰참가자격 제한 처분', start: '2022-04-11', end: '2022-10-10', instt: '한국수자원공사', law: '공공기관의 운영에 관한 법률', clause: '제39조제2항', reason: '정당한 이유 없이 계약을 이행하지 아니한 자', status: '제재종료', days: '183' },
+        { doc: '부정당업자 제재', start: '2019-08-01', end: '2019-10-30', instt: '부산광역시', law: '지방자치단체를 당사자로 하는 계약에 관한 법률', clause: '제31조제1항', reason: '입찰 또는 계약에 관한 서류를 위조·변조하거나 부정하게 행사한 자', status: '제재종료', days: '91' }] },
   ];
   const hit = C.filter(c => (c.name + c.bizno).replace(/\(주\)|\s/g, '').includes(q));
   hit.forEach(c => c.active = c.sanctions.some(x => x.end >= t));
@@ -833,17 +844,33 @@ function openCorp(bizno) {
   sheet.open();
 }
 
+
+/* 긴 법조문 사유 → 한눈에 보이는 짧은 말 */
+const REASONS = [[/뇌물/, '뇌물 제공'], [/담합/, '입찰 담합'], [/허위|위조|변조/, '허위·위조 서류'], [/하도급/, '하도급 위반'], [/부실|조잡/, '부실 이행'],
+  [/안전|사망|재해/, '안전조치 위반'], [/계약을 이행하지|계약을 체결.*않|정당한 이유 없이/, '계약 불이행'], [/입찰.*방해|공정한 집행/, '입찰 방해'], [/사기|부정한 행위/, '부정행위'], [/개인정보|정보.*유출/, '정보 유출'], [/조세|체납/, '조세 포탈']];
+const reasonShort = x => { const t = (x.reason || '') + ' ' + (x.clause || ''); const m = REASONS.find(([r]) => r.test(t)); return m ? m[1] : (x.reason || x.clause || '사유 미상').replace(/\(.*?\)/g, '').slice(0, 14); };
+const daysLeft = x => Math.round((new Date(x.end + 'T00:00:00Z') - new Date(S.dfound.today + 'T00:00:00Z')) / 864e5);
+const pct = x => { const a = new Date(x.start + 'T00:00:00Z'), b = new Date(x.end + 'T00:00:00Z'), n = new Date(S.dfound.today + 'T00:00:00Z'); return Math.max(0, Math.min(100, Math.round((n - a) / (b - a) * 100))); };
+
+const histHtml = o => o.sanctions.length < (o.active ? 2 : 1) ? '' : `<div class="sec">제재 이력 <span class="n">${o.sanctions.length}건</span><span class="r">2016.9 이후</span></div><div class="hist">` + o.sanctions.map(x => {
+  const on = x.end >= S.dfound.today;
+  return `<div class="hi ${on ? 'on' : ''}" data-corp="${o.bizno}"><i></i><div class="tx"><b>${esc(reasonShort(x))}</b><small class="num">${ymd(x.start)} ~ ${ymd(x.end)}${x.days ? ' · ' + esc(x.days) + '일' : ''}</small><small>${esc(x.instt || '')}</small></div><span class="tag ${on ? 't-stop' : ''}">${on ? '진행 중' : '끝남'}</span></div>`; }).join('') + '</div>';
+const ymd = d => String(d || '').slice(2).replace(/-/g, '.');
 function debarList() {
   const F = S.dfound;
-  if (F === 'busy') return '<div class="ak-empty">사업자번호를 찾고 제재 여부를 확인하는 중이에요…</div>';
+  if (F === 'busy') return '<div class="ak-empty">사업자번호를 찾고 제재 이력을 확인하는 중이에요…<br><small>처음 한 번은 1분쯤 걸릴 수 있어요</small></div>';
   if (F?.error) return `<div class="ak-empty">${esc(F.error)}<br><button data-act="debar" type="button">다시 시도</button></div>`;
   if (!F) return `<p class="note">업체 이름을 넣으면 사업자번호를 찾아 부정당제재 여부를 바로 알려 드려요. 사업자번호(10자리)를 넣어도 돼요.</p>`;
   if (!F.items.length) return '<div class="ak-empty">찾은 업체가 없어요. (주)·주식회사를 빼거나 사업자번호로 찾아 보세요.' + (F.note ? '<br><small style="display:block;margin-top:10px;font-size:11.5px">' + esc(F.note) + '</small>' : '') + '</div>';
   const [o, ...rest] = F.items, x = o.sanctions[0];
-  const v = o.active ? ['v-ban', '부정당제재 중', '<path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>'] : o.sanctions.length ? ['v-past', '지금은 제재 없음', '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>'] : ['v-ok', '제재 없음', '<path d="m6 12.5 4 4 8-9"/>'];
-  return `<div class="verdict ${v[0]}" data-corp="${o.bizno}"><div class="ic"><svg class="ak-ic" viewBox="0 0 24 24">${v[2]}</svg></div><div class="big">${v[1]}</div>
-    <div class="who">${nm(o.name)}</div><div class="sm num">${bizFmt(o.bizno)}${o.ceo ? ' · 대표 ' + esc(o.ceo) : ''}</div>
-    ${x ? `<div class="why">${o.active ? '' : '지난 제재 · '}${period(x)}<br>${esc(x.instt || '')} · ${esc(x.reason || x.clause || '')}</div>` : ''}</div>
+  const v = o.active ? ['v-ban', '제재 중'] : o.sanctions.length ? ['v-past', '제재 끝남'] : ['v-ok', '제재 없음'];
+  const ring = x && o.active ? `<svg class="ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="bg"/><circle cx="60" cy="60" r="52" class="fg" stroke-dasharray="${(326.7 * (100 - pct(x)) / 100).toFixed(1)} 326.7" transform="rotate(-90 60 60)"/></svg>
+    <div class="ctr"><b class="num">${daysLeft(x)}</b><small>일 남음</small></div>` : `<svg class="ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="bg"/></svg><div class="ctr"><b style="font-size:40px">${o.sanctions.length ? '–' : '✓'}</b></div>`;
+  return `<div class="vC ${v[0]}" data-corp="${o.bizno}"><div class="ringbox">${ring}</div>
+    <div class="st">${v[1]}</div><div class="who">${nm(o.name)}</div><div class="sm num">${bizFmt(o.bizno)}${o.ceo ? ' · 대표 ' + esc(o.ceo) : ''}</div>
+    ${x ? `<div class="pills"><span>${esc(reasonShort(x))}</span><span>${esc((x.instt || '').split(' ').pop())}</span><span class="num">${o.active ? '~' + ymd(x.end) : ymd(x.end) + ' 끝'}</span></div>
+      <div class="more">눌러서 자세히 ›</div>` : '<div class="sm" style="margin:8px 0 12px">나라장터에 등록된 부정당제재 기록이 없어요</div>'}</div>
+    ${histHtml(o)}
     ${rest.length ? `<div class="sec">비슷한 이름 <span class="n">${rest.length}곳</span></div><div class="clist">` + rest.map(r => { const [cls, lab] = debarState(r);
       return `<div class="crow" data-corp="${r.bizno}"><div class="nm"><b>${nm(r.name)}</b><small class="num">${bizFmt(r.bizno)}${r.ceo ? ' · ' + esc(r.ceo) : ''}</small></div><span class="tag ${cls}">${lab}</span></div>`; }).join('') + '</div>' : ''}`;
 }
