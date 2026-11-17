@@ -919,6 +919,24 @@ function buildDebarHistory() {
 /** 직접 실행: 부정당업체 검색이 서버에서 어떻게 되는지 로그로 본다. 이름을 바꿔 실행해도 돼요 */
 function debugDebar(name) {
   name = name || '올포랜드';
+  // 조달업체 기본정보 API가 업체명 검색에 왜 0건을 주는지: 조건을 하나씩 바꿔 전체 건수(totalCount)를 본다
+  const now = new Date(), clean = String(name).replace(/\(주\)|㈜|주식회사/g, '').trim();
+  const probe = (label, prm) => {
+    try { const b = call_(USR + 'getPrcrmntCorpBasicInfo02', Object.assign({ numOfRows: 3, pageNo: 1 }, prm));
+      console.log('[시험] ' + label + ' → ' + (b.totalCount || 0) + '건 ' + items_(b).map(c => c.corpNm + '(' + c.bizno + ')').join(', ')); }
+    catch (e) { console.log('[시험] ' + label + ' → 오류: ' + e.message); }
+  };
+  const ago = d => fmt_(new Date(now - d * 864e5));
+  probe('업체명 없이 최근 1일 등록', { inqryDiv: '1', inqryBgnDt: ago(1), inqryEndDt: fmt_(now) });
+  probe('업체명 없이 최근 30일 등록', { inqryDiv: '1', inqryBgnDt: ago(30), inqryEndDt: fmt_(now) });
+  probe('업체명 없이 1990년부터 등록', { inqryDiv: '1', inqryBgnDt: '199001010000', inqryEndDt: fmt_(now) });
+  probe('"' + clean + '" 1990년부터 등록', { inqryDiv: '1', inqryBgnDt: '199001010000', inqryEndDt: fmt_(now), corpNm: clean });
+  probe('"(주)' + clean + '" 1990년부터 등록', { inqryDiv: '1', inqryBgnDt: '199001010000', inqryEndDt: fmt_(now), corpNm: '(주)' + clean });
+  probe('"주식회사 ' + clean + '" 1990년부터 등록', { inqryDiv: '1', inqryBgnDt: '199001010000', inqryEndDt: fmt_(now), corpNm: '주식회사 ' + clean });
+  probe('"' + clean + '" 최근 1년 변경', { inqryDiv: '2', inqryBgnDt: ago(365), inqryEndDt: fmt_(now), corpNm: clean });
+  probe('"' + clean + '" 최근 30일 변경', { inqryDiv: '2', inqryBgnDt: ago(30), inqryEndDt: fmt_(now), corpNm: clean });
+  probe('사업자번호 1098636323(지오스토리)', { inqryDiv: '3', bizno: '1098636323' });
+  console.log('업체 사전: ' + companies_().filter(c => coNorm_(c.name).indexOf(coNorm_(clean)) >= 0).map(c => c.name + '(' + c.bizno + ')').join(', ') || '업체 사전에 없음');
   const r = debar_(name);
   TRACE.forEach(t => console.log('· ' + t.api + ': ' + (t.calls || 0) + '번 호출, ' + t.n + '건' + (t.err ? ' · 오류 ' + t.err : '')));
   r.items.forEach(o => console.log([o.match === 'similar' ? '(비슷)' : '', o.bizno, o.name, o.ceo, o.active ? '제재 중' : o.sanctions.length ? '지난 제재 ' + o.sanctions.length + '건' : '제재 없음'].join(' | ')));
