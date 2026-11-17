@@ -475,6 +475,13 @@ function check_(force) {
     // 참가업체 목록이 필요한 것(개찰완료)을 한꺼번에(병렬로) 받는다
     const need = todo.filter(k => (found[k].progrsDivCdNm || '') === '개찰완료');
     const lists = biddersMany_(need.map(k => found[k]), s);
+    // 업체 사전: 참가업체·1순위의 업체명과 사업자번호를 모아 둔다 (부정당업체 검색에서 이름→사업자번호)
+    try {
+      const pairs = [];
+      Object.keys(lists).forEach(k => lists[k].forEach(b => pairs.push([b.bizno, b.name])));
+      Object.keys(found).forEach(k => { const t = parseTop_(found[k].opengCorpInfo); if (t) pairs.push([t.bizno, t.name]); });
+      coDictAdd_(pairs);
+    } catch (e) { console.warn('업체 사전 저장 실패: ' + e); }
     let changed = false;
     todo.forEach(k => {
       const raw = found[k], status = raw.progrsDivCdNm || '개찰';
@@ -699,17 +706,29 @@ function debar_(text) {
     return o;
   };
   const isNo = /^\d{10}$/.test(digits) && !/[가-힣A-Za-z]/.test(text);
+  const key = coNorm_(text);
   if (isNo) put(digits, {});
   else {
-    corpByName_(text).forEach(c => put(c.bizno, { name: c.corpNm, ceo: c.ceoNm, addr: [c.rgnNm || '', c.adrs || ''].join(' ').trim(), kind: c.corpBsnsDivNm }));
-    // 제재 목록에서 이름으로 직접 찾기
-    // 제재 이력에서 이름으로 직접 찾기 (기본정보에 없는 업체 대비)
-    try { history_().filter(r => coNorm_(r.corpNm).indexOf(coNorm_(text)) >= 0).forEach(r => put(r.bizno, { name: r.corpNm })); } catch (e) { TRACE.push({ api: '제재 이력', n: 0, err: e.message }); }
+    // ① 업체 사전(개찰 참가업체·제재 이력에서 모은 이름)에서 같은 이름·이름이 들어간 업체
+    const dict = companies_();
+    dict.forEach(c => { const n = coNorm_(c.name); if (n === key || (key.length >= 2 && n.indexOf(key) >= 0)) put(c.bizno, { name: c.name, match: n === key ? 'exact' : 'part' }); });
+    TRACE.push({ api: '업체 사전(' + dict.length + '곳)', n: Object.keys(byNo).length, calls: 0 });
+    // ② 같은 이름이 없으면 나라장터 조달업체 기본정보에서 (주)·주식회사를 붙여 가며 찾는다
+    if (!Object.keys(byNo).some(b => byNo[b].match === 'exact')) {
+      corpByName_(text).forEach(c => put(c.bizno, { name: c.corpNm, ceo: c.ceoNm, addr: [c.rgnNm || '', c.adrs || ''].join(' ').trim(), kind: c.corpBsnsDivNm,
+        match: coNorm_(c.corpNm) === key ? 'exact' : 'part' }));
+      Object.keys(byNo).forEach(b => { if (byNo[b].name && dict.every(c => c.bizno !== b)) coDictAdd_([[b, byNo[b].name]]); });
+    }
+    // ③ 오타 대비: 같은 이름이 없으면 비슷한 이름(한두 글자 다른 것)도 보여 준다
+    if (!Object.keys(byNo).some(b => byNo[b].match === 'exact')) {
+      dict.map(c => ({ c: c, sc: similar_(key, coNorm_(c.name)) })).filter(x => x.sc >= 0.5 && !byNo[x.c.bizno])
+        .sort((a, b) => b.sc - a.sc).slice(0, 6).forEach(x => put(x.c.bizno, { name: x.c.name, match: 'similar' }));
+    }
   }
-  // 이름이 정확히 같은 업체 먼저, 최대 15곳
-  const key = coNorm_(text);
+  // 같은 이름 → 이름이 들어간 것 → 비슷한 이름 순, 최대 15곳
+  const rank = o => o.match === 'exact' || coNorm_(o.name) === key ? 0 : o.match === 'similar' ? 2 : 1;
   let list = Object.keys(byNo).map(k => byNo[k])
-    .sort((a, b) => (coNorm_(b.name) === key) - (coNorm_(a.name) === key) || String(a.name).length - String(b.name).length).slice(0, 15);
+    .sort((a, b) => rank(a) - rank(b) || String(a.name).length - String(b.name).length).slice(0, 15);
   // 사업자번호마다 제재 내역 (조회 시점에 유효한 제재)
   const res = fetchMany_(list.map(o => ({ url: USR + 'getUnptRsttCorpInfo02', params: { numOfRows: 100, pageNo: 1, inqryDiv: '1', bizno: o.bizno } })));
   let errs = 0, lastErr = '';
@@ -733,7 +752,8 @@ function debar_(text) {
       .sort((a, b) => ((b.end >= today) - (a.end >= today)) || String(b.start).localeCompare(String(a.start)));
     o.active = o.sanctions.some(x => !x.end || x.end >= today);
   });
-  list.sort((a, b) => (b.active - a.active) || (b.sanctions.length - a.sanctions.length));
+  list.forEach(o => { o.match = rank(o) === 0 ? 'exact' : o.match === 'similar' ? 'similar' : 'part'; });
+  list.sort((a, b) => (rank(a) - rank(b)) || (b.active - a.active) || (b.sanctions.length - a.sanctions.length));
   return { items: list, today: today, note: list.length ? '' : traceText_() };
 }
 
@@ -750,7 +770,6 @@ function sanction_(x) {
  *  입찰공고 API처럼 긴 기간에 0건을 줄 수 있어, 0건이면 5년씩 잘라 다시 부른다 */
 function corpByName_(name) {
   const now = new Date(), clean = String(name).replace(/\(주\)|㈜|주식회사|\(유\)|유한회사/g, '').trim();
-  const names = [name]; if (clean && clean !== name) names.push(clean);
   const seen = {}, out = [];
   const take = (res, label, calls) => {
     let n = 0, errs = 0, lastErr = '';
@@ -758,19 +777,82 @@ function corpByName_(name) {
       items_(r.body).forEach(c => { const b = String(c.bizno || ''); n++; if (b && !seen[b]) { seen[b] = 1; out.push(c); } }); });
     TRACE.push({ api: label, n: n, calls: calls, err: errs ? errs + '번 실패: ' + lastErr : '' });
   };
-  const call = (div, from, to) => names.map(nm => ({ url: USR + 'getPrcrmntCorpBasicInfo02', params: { numOfRows: 100, pageNo: 1, inqryDiv: div, inqryBgnDt: fmt_(from), inqryEndDt: fmt_(to), corpNm: nm } }));
-  const memo = P.getProperty('corpWin');   // 되는 방식 기억: 'all' 또는 '5y'
-  if (memo !== '5y') {
-    const L = call('1', new Date(1990, 0, 1), now).concat(call('2', new Date(1990, 0, 1), now));
-    take(fetchMany_(L), '업체 기본정보(전체 기간)', L.length);
-    if (out.length) { P.setProperty('corpWin', 'all'); return out; }
-  }
-  const L = [];
-  for (let y = now.getFullYear(); y >= 1995; y -= 5) L.push.apply(L, call('1', new Date(y - 4, 0, 1), y === now.getFullYear() ? now : new Date(y, 11, 31, 23, 59)));
-  take(fetchMany_(L), '업체 기본정보(5년씩)', L.length);
-  if (out.length) P.setProperty('corpWin', '5y');
-  else if (memo === '5y') P.deleteProperty('corpWin');
+  const call = (names, div, from, to) => names.map(nm => ({ url: USR + 'getPrcrmntCorpBasicInfo02', params: { numOfRows: 100, pageNo: 1, inqryDiv: div, inqryBgnDt: fmt_(from), inqryEndDt: fmt_(to), corpNm: nm } }));
+  const run = (names, label, short) => {
+    const memo = P.getProperty('corpWin');   // 되는 방식 기억: 'all' 또는 '5y'
+    if (memo !== '5y') {
+      const L = call(names, '1', new Date(1990, 0, 1), now).concat(call(names, '2', new Date(1990, 0, 1), now));
+      take(fetchMany_(L), '기본정보 ' + label + '(전체 기간)', L.length);
+      if (out.length) { P.setProperty('corpWin', 'all'); return; }
+      if (short) return;   // 붙여 보는 이름까지 5년씩 나누면 호출이 너무 많아진다
+    }
+    const L = [];
+    for (let y = now.getFullYear(); y >= 1995; y -= 5) L.push.apply(L, call(names, '1', new Date(y - 4, 0, 1), y === now.getFullYear() ? now : new Date(y, 11, 31, 23, 59)));
+    take(fetchMany_(L), '기본정보 ' + label + '(5년씩)', L.length);
+    if (out.length) P.setProperty('corpWin', '5y');
+  };
+  // 넣은 그대로 → 안 되면 (주)·주식회사를 앞뒤로 붙여서
+  run([...new Set([name, clean])], '"' + name + '"');
+  if (!out.length && clean) run(['(주)' + clean, clean + '(주)', '주식회사 ' + clean, '주식회사' + clean, clean + ' 주식회사', '㈜' + clean], '(주)·주식회사 붙여서', true);
   return out;
+}
+
+/** 업체 사전 ('업체' 시트: 사업자번호 | 업체명). 개찰 참가업체·제재 이력에서 모은다 */
+let CODICT = null;
+function coSheet_() {
+  const ss = book_();
+  let sh = ss.getSheetByName('업체');
+  if (!sh) { sh = ss.insertSheet('업체'); sh.appendRow(['사업자번호', '업체명', '모은 날']); }
+  return sh;
+}
+function companies_() {
+  if (CODICT) return CODICT;
+  const map = {};
+  rows_(coSheet_()).forEach(r => { const b = String(r[0]).replace(/\D/g, '').padStart(10, '0'); if (b !== '0000000000' && r[1]) map[b] = String(r[1]); });
+  try { history_().forEach(h => { if (h.bizno && !map[h.bizno]) map[h.bizno] = h.corpNm; }); } catch (e) {}
+  CODICT = Object.keys(map).map(b => ({ bizno: b, name: map[b] }));
+  return CODICT;
+}
+function coDictAdd_(pairs) {
+  const sh = coSheet_(), n = sh.getLastRow();
+  const have = {};
+  if (n > 1) sh.getRange(2, 1, n - 1, 1).getValues().forEach(r => have[String(r[0]).replace(/\D/g, '').padStart(10, '0')] = 1);
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'), add = [];
+  pairs.forEach(([b, nm]) => { b = String(b || '').replace(/\D/g, ''); if (b.length !== 10 || !nm || have[b]) return; have[b] = 1; add.push([b, String(nm).trim(), today]); });
+  if (!add.length) return 0;
+  const rg = sh.getRange(n + 1, 1, add.length, 3);
+  try { rg.setNumberFormat('@'); } catch (e) {}
+  rg.setValues(add);
+  CODICT = null;
+  return add.length;
+}
+
+/** 이름이 얼마나 비슷한지 0~1: 두 글자씩 묶어 겹치는 비율, 한 글자 오타는 0.8 이상 */
+function similar_(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (Math.abs(a.length - b.length) <= 1 && a.length >= 3) {   // 한 글자 다르거나 빠진 것
+    let i = 0, j = 0, diff = 0;
+    while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } diff++; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } if (diff > 1) break; }
+    diff += (a.length - i) + (b.length - j);
+    if (diff <= 1) return 0.85;
+  }
+  const bg = t => { const o = {}; for (let k = 0; k < t.length - 1; k++) o[t.substr(k, 2)] = (o[t.substr(k, 2)] || 0) + 1; return o; };
+  const A = bg(a), B = bg(b); let inter = 0, na = 0, nb = 0;
+  Object.keys(A).forEach(k => { na += A[k]; if (B[k]) inter += Math.min(A[k], B[k]); });
+  Object.keys(B).forEach(k => nb += B[k]);
+  return na + nb ? 2 * inter / (na + nb) : 0;
+}
+
+/** 처음 한 번: 업체 사전을 채운다 — 받은 결과 시트의 참가업체 + 최근 30일 개찰 1순위 업체 + 제재 이력 */
+function seedCompanies_() {
+  const pairs = [];
+  rows_(sheet_('결과')).forEach(r => { try { const o = JSON.parse(r[r.length - 1] || '{}'); (o.bidders || []).concat(o.ours || [], o.rivals || [], o.top ? [o.top] : []).forEach(b => pairs.push([b.bizno, b.name])); } catch (e) {} });
+  const now = new Date(), L = [];
+  ['Servc', 'Thng', 'Cnstwk'].forEach(k => { for (let d = 0; d < 30; d += 7) L.push({ url: SCRS + 'getOpengResultListInfo' + k, params: { numOfRows: 999, pageNo: 1, inqryDiv: '1', inqryBgnDt: fmt_(new Date(now - (d + 7) * 864e5)), inqryEndDt: fmt_(new Date(now - d * 864e5)) } }); });
+  fetchMany_(L).forEach(r => { if (!r.err) items_(r.body).forEach(x => { const t = parseTop_(x.opengCorpInfo); if (t) pairs.push([t.bizno, t.name]); }); });
+  try { history_().forEach(h => pairs.push([h.bizno, h.corpNm])); } catch (e) {}
+  return coDictAdd_(pairs);
 }
 
 /** 부정당제재 전체 이력(2016-09 이후, 끝난 제재 포함)을 '제재이력' 시트에 모아 두고 쓴다.
@@ -830,14 +912,16 @@ function buildDebarHistory() {
   const list = history_(true);
   console.log(traceText_());
   console.log('제재 이력 ' + list.length + '건을 「제재이력」 시트에 모았어요');
+  const added = seedCompanies_();
+  console.log('업체 사전에 ' + added + '곳을 더했어요 (지금 ' + companies_().length + '곳). 이후 개찰결과를 받을 때마다 참가업체가 자동으로 더해져요');
 }
 
 /** 직접 실행: 부정당업체 검색이 서버에서 어떻게 되는지 로그로 본다. 이름을 바꿔 실행해도 돼요 */
 function debugDebar(name) {
   name = name || '올포랜드';
   const r = debar_(name);
-  console.log(traceText_());
-  r.items.forEach(o => console.log([o.bizno, o.name, o.ceo, o.active ? '제재 중' : o.sanctions.length ? '지난 제재 ' + o.sanctions.length + '건' : '제재 없음'].join(' | ')));
+  TRACE.forEach(t => console.log('· ' + t.api + ': ' + (t.calls || 0) + '번 호출, ' + t.n + '건' + (t.err ? ' · 오류 ' + t.err : '')));
+  r.items.forEach(o => console.log([o.match === 'similar' ? '(비슷)' : '', o.bizno, o.name, o.ceo, o.active ? '제재 중' : o.sanctions.length ? '지난 제재 ' + o.sanctions.length + '건' : '제재 없음'].join(' | ')));
   if (!r.items.length) console.log('찾은 업체가 없어요');
 }
 

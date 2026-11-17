@@ -583,7 +583,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794911564';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794912091';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -810,7 +810,8 @@ function demoDebar(text) {
         { doc: '입찰참가자격 제한 처분', start: '2022-04-11', end: '2022-10-10', instt: '한국수자원공사', law: '공공기관의 운영에 관한 법률', clause: '제39조제2항', reason: '정당한 이유 없이 계약을 이행하지 아니한 자', status: '제재종료', days: '183' },
         { doc: '부정당업자 제재', start: '2019-08-01', end: '2019-10-30', instt: '부산광역시', law: '지방자치단체를 당사자로 하는 계약에 관한 법률', clause: '제31조제1항', reason: '입찰 또는 계약에 관한 서류를 위조·변조하거나 부정하게 행사한 자', status: '제재종료', days: '91' }] },
   ];
-  const hit = C.filter(c => (c.name + c.bizno).replace(/\(주\)|\s/g, '').includes(q));
+  let hit = C.filter(c => (c.name + c.bizno).replace(/\(주\)|\s/g, '').includes(q)).map(c => Object.assign({ match: 'part' }, c));
+  if (!hit.length && q.length >= 3) hit = C.filter(c => [...q].filter(ch => c.name.includes(ch)).length >= q.length - 1).map(c => Object.assign({ match: 'similar' }, c));
   hit.forEach(c => c.active = c.sanctions.some(x => x.end >= t));
   hit.sort((a, b) => b.active - a.active);
   return { items: hit, today: t, note: '' };
@@ -872,7 +873,11 @@ function debarList() {
   if (F === 'busy') return '<div class="ak-empty">사업자번호를 찾고 제재 이력을 확인하는 중이에요…<br><small>처음 한 번은 1분쯤 걸릴 수 있어요</small></div>';
   if (F?.error) return `<div class="ak-empty">${esc(F.error)}<br><button data-act="debar" type="button">다시 시도</button></div>`;
   if (!F) return `<p class="note">업체 이름을 넣으면 사업자번호를 찾아 부정당제재 여부를 바로 알려 드려요. 사업자번호(10자리)를 넣어도 돼요.</p>`;
-  if (!F.items.length) return '<div class="ak-empty">찾은 업체가 없어요. (주)·주식회사를 빼거나 사업자번호로 찾아 보세요.' + (F.note ? '<br><small style="display:block;margin-top:10px;font-size:11.5px">' + esc(F.note) + '</small>' : '') + '</div>';
+  const crow = r => { const [cls, lab] = debarState(r); return `<div class="crow" data-corp="${r.bizno}"><div class="nm"><b>${nm(r.name)}</b><small class="num">${bizFmt(r.bizno)}${r.ceo ? ' · ' + esc(r.ceo) : ''}</small></div><span class="tag ${cls}">${lab}</span></div>`; };
+  // 같은 이름이 없고 비슷한 이름만 찾았으면: 판정 대신 '혹시 이 업체인가요?' 목록
+  if (F.items.length && F.items[0].match === 'similar')
+    return `<div class="ak-empty" style="padding-bottom:8px">‘${esc(S.q.dtext)}’와 같은 이름은 못 찾았어요.</div><div class="sec">혹시 이 업체인가요? <span class="n">${F.items.length}곳</span></div><div class="clist">${F.items.map(crow).join('')}</div>`;
+  if (!F.items.length) return '<div class="ak-empty">찾은 업체가 없어요. 사업자번호(10자리)로 찾아 보세요. 업체 사전은 개찰결과를 받을 때마다 늘어나요.' + (F.note ? '<br><small style="display:block;margin-top:10px;font-size:11.5px">' + esc(F.note) + '</small>' : '') + '</div>';
   const [o, ...rest] = F.items, x = o.sanctions[0];
   const v = o.active ? ['v-ban', '제재 중'] : o.sanctions.length ? ['v-past', '제재 끝남'] : ['v-ok', '제재 없음'];
   const ring = x && o.active ? `<svg class="ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="bg"/><circle cx="60" cy="60" r="52" class="fg" stroke-dasharray="${(326.7 * (100 - pct(x)) / 100).toFixed(1)} 326.7" transform="rotate(-90 60 60)"/></svg>
@@ -882,7 +887,7 @@ function debarList() {
     ${x ? `<div class="pills"><span>${esc(reasonShort(x))}</span><span>${esc((x.instt || '').split(' ').pop())}</span><span class="num">${o.active ? '~' + ymd(x.end) : ymd(x.end) + ' 끝'}</span></div>
       <div class="more">눌러서 자세히 ›</div>` : '<div class="sm" style="margin:8px 0 12px">나라장터에 등록된 부정당제재 기록이 없어요</div>'}</div>
     ${histHtml(o)}
-    ${rest.length ? `<div class="sec">비슷한 이름 <span class="n">${rest.length}곳</span></div><div class="clist">` + rest.map(r => { const [cls, lab] = debarState(r);
+    ${rest.length ? `<div class="sec">${rest.every(r => r.match === 'similar') ? '혹시 이 업체인가요?' : '비슷한 이름'} <span class="n">${rest.length}곳</span></div><div class="clist">` + rest.map(r => { const [cls, lab] = debarState(r);
       return `<div class="crow" data-corp="${r.bizno}"><div class="nm"><b>${nm(r.name)}</b><small class="num">${bizFmt(r.bizno)}${r.ceo ? ' · ' + esc(r.ceo) : ''}</small></div><span class="tag ${cls}">${lab}</span></div>`; }).join('') + '</div>' : ''}`;
 }
 
