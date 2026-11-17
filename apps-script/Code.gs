@@ -740,7 +740,8 @@ function debar_(text) {
 function items_(body) { const it = body && body.items; return Array.isArray(it) ? it : it && it.item ? [].concat(it.item) : []; }
 
 function sanction_(x) {
-  return { doc: x.unptRsttDocNm || '', start: String(x.rsttBgnDate || '').slice(0, 10), end: String(x.rsttEndDate || '').slice(0, 10),
+  const d = v => { const m = String(v || '').match(/(\d{4})[-.\/]?(\d{2})[-.\/]?(\d{2})/); return m ? m[1] + '-' + m[2] + '-' + m[3] : ''; };
+  return { doc: x.unptRsttDocNm || '', start: d(x.rsttBgnDate), end: d(x.rsttEndDate),
     instt: x.insttNm || '', law: x.lawordNm || '', clause: x.lawordArtclClause || '', reason: x.lawordArtclClauseCdNm || x.enfcPrvNm || '',
     status: x.rsttProgrsNm || '', months: x.rsttPrdMonthNum || '', days: x.rsttPrdDayNum || '', posted: String(x.ntfcnDt || '').slice(0, 10) };
 }
@@ -782,13 +783,16 @@ function history_(force) {
   const ss = book_();
   let sh = ss.getSheetByName('제재이력');
   if (!sh) { sh = ss.insertSheet('제재이력'); sh.appendRow(HIST_COLS); }
-  const old = rows_(sh).map(r => { const o = {}; HIST_COLS.forEach((k, i) => o[k] = String(r[i] == null ? '' : r[i])); return o; });
+  // 시트가 '2025-12-17'을 날짜로, 사업자번호를 숫자로 바꿔 버리므로 읽을 때 글자로 되돌린다
+  const cell = v => v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v == null ? '' : v);
+  const old = rows_(sh).map(r => { const o = {}; HIST_COLS.forEach((k, i) => o[k] = cell(r[i])); o.bizno = o.bizno.replace(/\D/g, '').padStart(10, '0'); return o; });
   const age = Date.now() - Number(P.getProperty('histAt') || 0);
   let list = old;
   if (force || !old.length || age > 7 * 864e5) list = sanctionsBetween_(new Date(2016, 8, 1), new Date(), old);
   else if (age > 12 * 3600e3) list = sanctionsBetween_(new Date(Date.now() - 400 * 864e5), new Date(), old);
   if (list !== old) {
     if (old.length) sh.getRange(2, 1, old.length, HIST_COLS.length).clearContent();
+    if (list.length) { try { sh.getRange(2, 1, list.length, HIST_COLS.length).setNumberFormat('@'); } catch (e) {} }   // 글자 그대로 저장
     if (list.length) sh.getRange(2, 1, list.length, HIST_COLS.length).setValues(list.map(o => HIST_COLS.map(k => o[k] || '')));
   }
   HIST = list;

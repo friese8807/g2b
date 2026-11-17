@@ -583,7 +583,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794910803';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1794911564';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -821,11 +821,22 @@ const period = x => (x.start || '?').replace(/-/g, '.') + ' ~ ' + (x.end || '').
 function modeSeg() {
   return `<div class="seg mode"><button class="${S.q.mode !== 'debar' ? 'on' : ''}" data-mode="notice" type="button">입찰공고</button><button class="${S.q.mode === 'debar' ? 'on' : ''}" data-mode="debar" type="button">부정당업체</button></div>`;
 }
+/* 날짜가 'Wed Dec 17 2025 …' 같은 모양으로 와도 2025-12-17로 바로잡고, 같은 제재는 하나만 */
+function fixDebar(F) {
+  const d = v => { v = String(v || ''); const m = v.match(/(\d{4})-(\d\d)-(\d\d)/); if (m) return m[0]; const t = new Date(v.replace(/\s*\(.*\)$/, '')); return isNaN(t) ? '' : AppKit.kstDate(t); };
+  (F.items || []).forEach(o => {
+    const seen = {};
+    o.sanctions = (o.sanctions || []).map(x => Object.assign({}, x, { start: d(x.start), end: d(x.end) }))
+      .filter(x => { const k = [x.start, x.end, x.instt].join('|'); if (seen[k]) return false; seen[k] = 1; return true; });
+    o.active = o.sanctions.some(x => x.end && x.end >= F.today);
+  });
+  return F;
+}
 async function doDebar() {
   const el = document.getElementById('qtext'); if (el) S.q.dtext = el.value.trim();
   if (!S.q.dtext) return AppKit.toast('업체 이름이나 사업자번호를 넣어 주세요');
   LS.set('q', S.q); S.dfound = 'busy'; tabs.go('search', 0);
-  try { S.dfound = await api('debar', { text: S.q.dtext }); }
+  try { S.dfound = fixDebar(await api('debar', { text: S.q.dtext })); }
   catch (e) { S.dfound = { error: e.message || '찾지 못했어요' }; }
   if (tabs.current === 'search') tabs.go('search', 0);
 }
@@ -836,7 +847,7 @@ function openCorp(bizno) {
     <h2>${nm(o.name || '(이름 없음)')}</h2><div class="org">사업자번호 ${bizFmt(o.bizno)}${o.ceo ? ' · 대표 ' + esc(o.ceo) : ''}</div>
     ${o.addr ? `<dl class="facts"><dt>주소</dt><dd>${esc(o.addr)}</dd></dl>` : ''}
     ${o.sanctions.length ? o.sanctions.map((x, i) => `<div class="kv"><h4>제재 ${o.sanctions.length > 1 ? i + 1 : ''} ${x.end >= S.dfound.today ? '<span class="tag t-stop">진행 중</span>' : '<span class="tag">끝남</span>'}</h4><dl>
-      <dt>제재기간</dt><dd>${period(x)}${x.days ? ' (' + esc(x.days) + '일)' : ''}</dd><dt>제재기관</dt><dd>${esc(x.instt || '-')}</dd>
+      <dt>제재기간</dt><dd>${period(x)}${+x.days ? ' (' + esc(x.days) + '일)' : ''}</dd><dt>제재기관</dt><dd>${esc(x.instt || '-')}</dd>
       <dt>사유</dt><dd>${esc(x.reason || '-')}</dd><dt>근거법령</dt><dd>${esc(x.law || '-')}${x.clause ? ' ' + esc(x.clause) : ''}</dd>
       ${x.doc ? `<dt>문서명</dt><dd>${esc(x.doc)}</dd>` : ''}${x.status ? `<dt>상태</dt><dd>${esc(x.status)}</dd>` : ''}</dl></div>`).join('')
       : '<div class="ak-empty">나라장터에 등록된 부정당제재가 없어요.</div>'}
@@ -854,7 +865,7 @@ const pct = x => { const a = new Date(x.start + 'T00:00:00Z'), b = new Date(x.en
 
 const histHtml = o => o.sanctions.length < (o.active ? 2 : 1) ? '' : `<div class="sec">제재 이력 <span class="n">${o.sanctions.length}건</span><span class="r">2016.9 이후</span></div><div class="hist">` + o.sanctions.map(x => {
   const on = x.end >= S.dfound.today;
-  return `<div class="hi ${on ? 'on' : ''}" data-corp="${o.bizno}"><i></i><div class="tx"><b>${esc(reasonShort(x))}</b><small class="num">${ymd(x.start)} ~ ${ymd(x.end)}${x.days ? ' · ' + esc(x.days) + '일' : ''}</small><small>${esc(x.instt || '')}</small></div><span class="tag ${on ? 't-stop' : ''}">${on ? '진행 중' : '끝남'}</span></div>`; }).join('') + '</div>';
+  return `<div class="hi ${on ? 'on' : ''}" data-corp="${o.bizno}"><i></i><div class="tx"><b>${esc(reasonShort(x))}</b><small class="num">${ymd(x.start)} ~ ${ymd(x.end)}${+x.days ? ' · ' + esc(x.days) + '일' : ''}</small><small>${esc(x.instt || '')}</small></div><span class="tag ${on ? 't-stop' : ''}">${on ? '진행 중' : '끝남'}</span></div>`; }).join('') + '</div>';
 const ymd = d => String(d || '').slice(2).replace(/-/g, '.');
 function debarList() {
   const F = S.dfound;
