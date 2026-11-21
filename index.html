@@ -630,7 +630,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1795273969';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1795275070';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -1141,7 +1141,8 @@ function renderRival() {
   let h = rvPeriod('개찰 ' + bids.length + '건');
   if (!bids.length) return h + '<div class="ak-empty">이 기간에 쌓인 개찰이 없어요</div>' + rvFill(f);
   const o = st.ours, wp = o.meet ? o.w / o.meet * 100 : 50;
-  h += `<div class="vs"><div class="who"><span>우리</span><span>동종업체</span></div>
+  if (!o.meet) h += `<div class="card" style="text-align:center"><h2>아직 맞대결 기록이 없어요</h2><p class="sub" style="margin:6px 0 0;text-wrap:balance">이 기간에 쌓인 개찰 ${bids.length}건 중 우리(${(S.d?.settings?.myCompanies || []).map(esc).join('·')})와 동종업체가 함께 순위를 받은 개찰이 아직 없어요. ${S.rv.fill && S.rv.fill.pct < 100 ? '지난 1년치를 채우는 중이라(' + S.rv.fill.pct + '%) 며칠 지나면 승패가 쌓여요.' : ''}</p></div>`;
+  else h += `<div class="vs"><div class="who"><span>우리</span><span>동종업체</span></div>
     <div class="score"><b class="w">${o.w}</b><small>승 · 패</small><b class="l">${o.l}</b></div>
     <div class="sub">동종업체 ${st.rivals.length}곳과 ${o.meet}번 맞붙어 ${o.meet ? Math.round(wp) : 0}% 앞섰어요 · 우리 1순위 ${o.wins}회</div>
     <div class="tug"><div class="tb"><i class="w" style="width:${wp.toFixed(1)}%"></i><i class="l" style="width:${(100 - wp).toFixed(1)}%"></i></div></div></div>`;

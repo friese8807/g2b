@@ -1168,8 +1168,26 @@ function rivalSettings_(inp) {
   if (Object.keys(patch).length) saveSettings_(patch);
 }
 
+/** 처음 한 번: 개찰알림이 이미 받아 둔 결과(결과 시트, 최근 500건)에서 우리·동종이 참여한 것을 '전적'으로 옮긴다.
+ *  결과 시트에는 상위 10곳 + 우리·동종만 있어 '다른 업체' 수는 조금 적게 잡히지만, 승패·투찰률은 바로 보인다 */
+function rivalSeed_() {
+  if (P.getProperty('rfSeeded') === '1') return 0;
+  const s = settings_(), rows = [];
+  rows_(sheet_('결과')).forEach(r => {
+    let o; try { o = JSON.parse(r[r.length - 1] || '{}'); } catch (e) { return; }
+    const bd = (o.bidders || []).map(b => markCo_({ rank: b.rank, name: b.name, bizno: b.bizno, rate: b.rate, amount: b.amount, rmrk: b.rmrk }, s));
+    if (o.status !== '개찰완료' || !bd.some(b => b.mine || b.rival)) return;
+    rows.push([o.key, o.no, o.name || '', o.demand || o.org || '', String(o.opengDt || '').slice(0, 16), String(o.prtcpt || bd.length), o.status, '',
+      JSON.stringify(bd.map(b => [b.rank || 0, b.name, Number(b.rate) || 0, Number(b.amount) || 0, b.rmrk || '']))]);
+  });
+  const n = rivalAppend_(rows);
+  P.setProperty('rfSeeded', '1');
+  return n;
+}
+
 /** 앱이 부르는 자료: 최근 1년 전적 + 채우기 진행 + 목록 */
 function rivalLoad_() {
+  try { rivalSeed_(); } catch (e) { console.warn('결과 옮기기 실패: ' + e); }
   const s = settings_(), today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const cut = Utilities.formatDate(new Date(Date.now() - 366 * 864e5), TZ, 'yyyy-MM-dd');
   const bids = [];
