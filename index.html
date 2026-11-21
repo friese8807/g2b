@@ -630,7 +630,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1795275070';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1795279258';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -797,7 +797,7 @@ function cardA(r) {
     <div class="tags"><span class="tag ${statusCls(r.status)}">${esc(r.status)}</span>${r.read ? '' : '<span class="tag t-new">NEW</span>'}<span class="tag">${esc(r.via || '')}</span><span class="tm">${mdhm(r.at)}</span></div>
     <h3>${nm(r.name)}</h3><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
     <div class="grid3">
-      <div><small>1순위</small><b>${r.top ? esc(coShort(r.top.name)) : r.status === '유찰' ? '유찰' : '-'}</b></div>
+      <div><small>${r.top || r.status !== '유찰' ? '1순위' : '결과'}</small><b>${r.top ? esc(coShort(r.top.name)) : r.status === '유찰' ? '유찰' : '-'}</b></div>
       <div><small>투찰률</small><b class="num">${r.top ? rate(r.top.rate) : '-'}</b></div>
       ${r.mine ? `<div class="mine"><small>우리 순위</small><b class="num">${r.mine.rank || '-'}위</b></div>`
         : (r.rivals || []).length ? `<div class="rival"><small>동종 ${esc(coShort(r.rivals[0].name))}</small><b class="num">${r.rivals[0].rank || '-'}위${r.rivals.length > 1 ? ' 외 ' + (r.rivals.length - 1) : ''}</b></div>`
@@ -925,7 +925,7 @@ function debarList() {
   // 같은 이름이 없고 비슷한 이름만 찾았으면: 판정 대신 '혹시 이 업체인가요?' 목록
   if (F.items.length && F.items[0].match === 'similar')
     return `<div class="ak-empty" style="padding-bottom:8px">‘${esc(S.q.dtext)}’와 같은 이름은 못 찾았어요.</div><div class="sec">혹시 이 업체인가요? <span class="n">${F.items.length}곳</span></div><div class="clist">${F.items.map(crow).join('')}</div>`;
-  if (!F.items.length) return '<div class="ak-empty">찾은 업체가 없어요. 사업자번호(10자리)로 찾아 보세요. 업체 사전은 개찰결과를 받을 때마다 늘어나요.' + (F.note ? '<br><small style="display:block;margin-top:10px;font-size:11.5px">' + esc(F.note) + '</small>' : '') + '</div>';
+  if (!F.items.length) return '<div class="ak-empty">찾은 업체가 없어요. 이름을 다시 확인하거나 사업자번호(10자리)로 찾아 보세요.' + (F.note ? '<br><small style="display:block;margin-top:10px;font-size:11.5px">' + esc(F.note) + '</small>' : '') + '</div>';
   const [o, ...rest] = F.items, x = o.sanctions[0];
   const v = o.active ? ['v-ban', '제재 중'] : o.sanctions.length ? ['v-past', '제재 끝남'] : ['v-ok', '제재 없음'];
   const ring = x && o.active ? `<svg class="ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="bg"/><circle cx="60" cy="60" r="52" class="fg" stroke-dasharray="${(326.7 * (100 - pct(x)) / 100).toFixed(1)} 326.7" transform="rotate(-90 60 60)"/></svg>
