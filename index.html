@@ -274,6 +274,52 @@ table.bd td{padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:t
 table.bd td.r,table.bd th.r{text-align:right}
 table.bd tr.mine td{background:var(--mine);color:var(--mine-ink);font-weight:700}
 table.bd td.nm{word-break:keep-all;overflow-wrap:break-word}
+
+/* 경쟁사 전적 */
+:root{--win:#f2c94c;--lose:#7fb3de}
+@media (prefers-color-scheme:dark){:root{--win:#d9b23e;--lose:#4f86b5}}
+.grid3 b em{font-style:normal;font-weight:600;font-size:11.5px;color:var(--muted)}
+.tug{margin-top:10px}
+.tug .tl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:5px}
+.tug .tl b{color:var(--ink)}.tug .tl .w{color:var(--mine-ink);font-weight:800}.tug .tl .l{color:var(--p-blue-ink);font-weight:800}
+.tug .tb{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--box)}
+.tug .tb i{display:block;height:100%}.tug .tb .w{background:var(--win)}.tug .tb .l{background:var(--lose)}
+.tug .last{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--muted);min-width:0}
+.tug .last span:last-child{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dots{display:flex;gap:3px;flex:none}
+.dots i,.res{width:18px;height:18px;border-radius:50%;font-style:normal;font-size:10px;font-weight:800;display:grid;place-items:center;flex:none}
+.dots .w,.res.w{background:var(--win);color:#4a3600}.dots .l,.res.l{background:var(--lose);color:#0d2436}
+.res{width:24px;height:24px;font-size:11px}
+.spark{margin-top:12px;background:var(--box);border-radius:12px;padding:10px 12px 8px}
+.spark .hd{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;gap:8px}
+.spark .hd b{color:var(--ink)}.spark svg{display:block;width:100%;height:84px;overflow:visible}
+.spark .ax{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:3px}
+.crow .rk{flex:none;display:grid;gap:3px;justify-items:end}
+.crow .rk span{font-size:11.5px;font-weight:800;border-radius:6px;padding:2px 7px;white-space:nowrap}
+.crow .rk .m{background:var(--mine);color:var(--mine-ink)}.crow .rk .o{background:var(--p-blue);color:var(--p-blue-ink)}.crow .rk .x{background:var(--box);color:var(--muted)}
+.crow .nm b{font-size:13.5px;font-weight:600;line-height:1.38}
+.dt .back{border:0;background:none;color:var(--accent);font:inherit;font-weight:700;font-size:14px;padding:6px 0;cursor:pointer}
+.prog{height:10px;border-radius:5px;background:var(--box);overflow:hidden;margin:8px 0 6px}.prog i{display:block;height:100%;background:var(--accent)}
+.vs{border-radius:20px;padding:18px 16px 16px;background:linear-gradient(135deg,var(--mine) 0%,var(--mine) 38%,var(--p-blue) 62%,var(--p-blue) 100%);margin-bottom:12px;text-align:center}
+.vs .who{display:flex;justify-content:space-between;font-size:13px;font-weight:800}
+.vs .who span:first-child{color:var(--mine-ink)}.vs .who span:last-child{color:var(--p-blue-ink)}
+.vs .score{display:flex;justify-content:center;align-items:baseline;gap:14px;margin:6px 0 2px;font-weight:800}
+.vs .score b{font-size:44px;line-height:1;font-variant-numeric:tabular-nums}
+.vs .score .w{color:var(--mine-ink)}.vs .score .l{color:var(--p-blue-ink)}
+.vs .score small{font-size:15px;color:var(--ink);opacity:.6}
+.vs .sub{font-size:12.5px;color:var(--ink);opacity:.75;word-break:keep-all;text-wrap:balance}
+.vs .tug .tb{height:10px;border-radius:5px;background:rgba(255,255,255,.5)}
+.rl{background:var(--solid);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.rr{padding:12px 14px;border-top:1px solid var(--line);cursor:pointer;min-width:0}
+.rr:first-child{border-top:0}
+.rr .hd{display:flex;align-items:center;gap:8px}
+.rr .hd b{font-size:15px;flex:1;min-width:0;word-break:keep-all}
+.rr .hd .rec{font-size:13px;font-weight:800;white-space:nowrap}
+.rr .hd .rec .w{color:var(--mine-ink)}.rr .hd .rec .l{color:var(--p-blue-ink)}
+.rr .tug{margin-top:7px}
+table.bd tr[data-rvco]{cursor:pointer}
+.bcl>*{min-width:0}.tug,.tug .last{min-width:0;overflow:hidden}
+.tag.t-mine{background:var(--mine);color:var(--mine-ink)}.tag.t-dash{background:none;border:1px dashed var(--line);color:var(--muted)}
 </style>
 </head>
 <body>
@@ -289,6 +335,7 @@ table.bd td.nm{word-break:keep-all;overflow-wrap:break-word}
   <button type="button" data-tab="feed"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg><b class="badge" id="badge" hidden></b></span>알림</button>
   <button type="button" data-tab="search"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>검색</button>
   <button type="button" data-tab="watch"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg></span>감시</button>
+  <button type="button" data-tab="rival"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>경쟁사</button>
   <button type="button" data-tab="set"><span class="i"><svg class="ak-ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>설정</button>
 </nav>
 
@@ -583,7 +630,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1794912091';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1795273969';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -675,12 +722,13 @@ let api = async (action, payload = {}) => {
   if (!j.ok) throw Object.assign(new Error(j.message || '처리하지 못했어요'), { code: j.code });
   return j.data;
 };
-api = AppKit.wrap(api, a => a === 'load');
+api = AppKit.wrap(api, a => a === 'load' || a === 'rivalLoad');   // 배경 불러오기는 진행 표시 없이
 
 async function demoApi(action, p) {
   await new Promise(r => setTimeout(r, action === 'load' ? 200 : 600));
   const d = S.d || DEMO;
   if (action === 'load') return DEMO;
+  if (action === 'rivalLoad') return demoRivals();
   if (action === 'search') {
     const q = (p.text || '').replace(/\s/g, '').toLowerCase();
     return { items: DEMO.notices.filter(n => !q || (n.name + n.org + n.demand).replace(/\s/g, '').toLowerCase().includes(q)), total: DEMO.notices.length };
@@ -1008,12 +1056,201 @@ async function openDetail(key) {
   }
 }
 
+/* ───────── 경쟁사 전적 (예전 '경쟁사 수첩'을 합침) ─────────
+   서버 '전적' 시트(우리·동종업체가 참여한 개찰 + 참가업체 전체 순위)를 rivalLoad 로 받아 업체별로 센다.
+   우리 = 우리 회사 목록 중 앞선 순위, 맞대결 = 우리와 그 업체가 둘 다 순위를 받은 개찰에서 앞선 쪽이 승 */
+const RV = { per: LS.get('rvPer', 12), at: 0, busy: false, stack: [] };
+S.rv = S.demo ? null : LS.get('rv', null);
+const pct2 = v => { v = Number(v); if (!v) return '-'; if (v <= 1.5) v *= 100; return v.toFixed(2) + '%'; };
+const coNorm = s => String(s || '').replace(/\(주\)|㈜|주식회사|\(유\)|유한회사|\s/g, '').toLowerCase();
+const rvToday = () => S.rv?.today || AppKit.kstDate();
+
+async function loadRivals(force) {
+  if (RV.busy || (!force && S.rv && Date.now() - RV.at < 5 * 60e3)) return;
+  RV.busy = true;
+  try {
+    const d = await api('rivalLoad');
+    S.rv = d; RV.at = Date.now(); if (!S.demo) LS.set('rv', d);
+    if (rvShown() && !sheet.isOpen && !AppKit.editing()) redrawKeep();
+  } catch (e) { RV.err = e.message || '불러오지 못했어요'; if (rvShown()) redrawKeep(); }
+  finally { RV.busy = false; }
+}
+function rvBids() {
+  const t = new Date(rvToday() + 'T00:00:00Z'); t.setUTCMonth(t.getUTCMonth() - RV.per);
+  const cut = t.toISOString().slice(0, 10);
+  return (S.rv?.bids || []).filter(b => b.dt.slice(0, 10) > cut).map(rvClassify);
+}
+function rvClassify(bid) {
+  const st = S.d?.settings || {}, ours = (st.myCompanies || []).map(coNorm).filter(Boolean), rv = (st.rivals || []).filter(Boolean);
+  const sig = ours.join('|') + '#' + rv.join('|');
+  if (bid._sig === sig) return bid;
+  bid._sig = sig;
+  bid._p = bid.b.map(([rank, name, rate, amount, rmrk]) => {
+    const n = coNorm(name), mine = ours.some(k => n.indexOf(k) >= 0), r = !mine && rv.find(e => coNorm(e) && n.indexOf(coNorm(e)) >= 0);
+    return { rank, name, rate, amount, rmrk, mine, rival: !!r, id: mine ? '우리' : r ? r : coShort(name) };
+  });
+  const m = bid._p.filter(p => p.mine && p.rank > 0).map(p => p.rank);
+  bid._our = m.length ? Math.min(...m) : bid._p.some(p => p.mine) ? 0 : null;   // null 안 냄 · 0 순위 없음
+  bid._top = bid._p.find(p => p.rank === 1) || null;
+  return bid;
+}
+function rvStats(bids) {
+  const M = {}, st = S.d?.settings || {};
+  const rec = (id, kind) => M[id] || (M[id] = { id, kind, label: id, n: 0, wins: 0, rates: [], meet: 0, w: 0, l: 0, list: [], byMonth: {}, last: [] });
+  rec('우리', 'mine'); (st.rivals || []).forEach(e => rec(e, 'rival'));
+  bids.forEach(bid => {
+    const best = {};
+    bid._p.forEach(p => {
+      const c = rec(p.id, p.mine ? 'mine' : p.rival ? 'rival' : 'other');
+      if (c.kind === 'other') c.label = coShort(p.name);
+      if (!(p.id in best)) { c.n++; c.list.push(bid); best[p.id] = 1e9; }
+      if (p.rank > 0) best[p.id] = Math.min(best[p.id], p.rank);
+      if (p.rate) { c.rates.push(p.rate); const k = bid.dt.slice(0, 7); (c.byMonth[k] = c.byMonth[k] || []).push(p.rate); }
+      if (p.rank === 1) c.wins++;
+    });
+    if (bid._our > 0) Object.keys(best).forEach(id => {
+      if (id === '우리' || best[id] >= 1e9) return;
+      const c = M[id], win = bid._our < best[id]; c.meet++; win ? c.w++ : c.l++;
+      if (c.last.length < 5) c.last.push({ win, bid });
+    });
+  });
+  Object.values(M).forEach(c => { c.avg = c.rates.length ? c.rates.reduce((a, b) => a + b, 0) / c.rates.length : 0; });
+  const rivals = Object.values(M).filter(c => c.kind === 'rival'), ours = M['우리'];
+  ours.meet = rivals.reduce((a, c) => a + c.meet, 0); ours.w = rivals.reduce((a, c) => a + c.w, 0); ours.l = rivals.reduce((a, c) => a + c.l, 0);
+  return { M, ours, rivals: rivals.filter(c => c.n).sort((a, b) => b.meet - a.meet || b.n - a.n), idle: rivals.filter(c => !c.n),
+    others: Object.values(M).filter(c => c.kind === 'other' && c.n >= 3).sort((a, b) => b.meet - a.meet || b.n - a.n).slice(0, 4) };
+}
+
+/* 화면 조각 — 개찰알림의 카드·회색 3칸·원형 그래프·순위표를 그대로 쓴다 */
+const rvG3 = c => `<div class="grid3"><div class="${c.kind === 'mine' ? 'mine' : c.kind === 'rival' ? 'rival' : ''}"><small>참여</small><b class="num">${c.n}회</b></div>
+  <div><small>1순위</small><b class="num">${c.wins}회 <em>${c.n ? Math.round(c.wins / c.n * 100) : 0}%</em></b></div>
+  <div><small>평균 투찰률</small><b class="num">${pct2(c.avg)}</b></div></div>`;
+function rvTug(c, mineSide) {
+  if (!c.meet) return `<div class="tug"><div class="tl"><span>${mineSide ? '이 기간에 동종업체와 맞붙은 개찰이 없어요' : '이 기간에 우리와 맞붙은 적이 없어요'}</span></div></div>`;
+  const wp = (c.w / c.meet * 100).toFixed(1);
+  return `<div class="tug"><div class="tl"><span>${mineSide ? '동종업체와' : '우리와'} <b>${c.meet}번</b> 만나</span><span><span class="w">우리 ${c.w}승</span> · <span class="l">${c.l}패</span></span></div>
+    <div class="tb"><i class="w" style="width:${wp}%"></i><i class="l" style="width:${(100 - wp).toFixed(1)}%"></i></div>
+    ${c.last.length ? `<div class="last"><span class="dots">${c.last.map(x => `<i class="${x.win ? 'w' : 'l'}">${x.win ? '승' : '패'}</i>`).join('')}</span><span>최근 ${rvMd(c.last[0].bid.dt)} ${esc(c.last[0].bid.name)}</span></div>` : ''}</div>`;
+}
+const rvMd = dt => { const m = String(dt).match(/\d{4}-(\d\d)-(\d\d)/); return m ? +m[1] + '/' + +m[2] : ''; };
+const rvPeriod = right => `<div class="chips" style="margin:0 0 12px;align-items:center">${[3, 6, 12].map(m => `<button class="chip ${RV.per === m ? 'on' : ''}" data-rvper="${m}" type="button">${m === 12 ? '1년' : m + '개월'}</button>`).join('')}<span style="margin-left:auto;font-size:12px;color:var(--muted)">${right}</span></div>`;
+function renderRival() {
+  if (!S.rv) { loadRivals(); return RV.err ? `<div class="ak-empty">${esc(RV.err)}<br><button data-rvreload type="button">다시 시도</button></div>` : '<div class="ak-empty">전적을 불러오는 중…</div>'; }
+  loadRivals();
+  const bids = rvBids(), st = rvStats(bids), f = S.rv.fill;
+  let h = rvPeriod('개찰 ' + bids.length + '건');
+  if (!bids.length) return h + '<div class="ak-empty">이 기간에 쌓인 개찰이 없어요</div>' + rvFill(f);
+  const o = st.ours, wp = o.meet ? o.w / o.meet * 100 : 50;
+  h += `<div class="vs"><div class="who"><span>우리</span><span>동종업체</span></div>
+    <div class="score"><b class="w">${o.w}</b><small>승 · 패</small><b class="l">${o.l}</b></div>
+    <div class="sub">동종업체 ${st.rivals.length}곳과 ${o.meet}번 맞붙어 ${o.meet ? Math.round(wp) : 0}% 앞섰어요 · 우리 1순위 ${o.wins}회</div>
+    <div class="tug"><div class="tb"><i class="w" style="width:${wp.toFixed(1)}%"></i><i class="l" style="width:${(100 - wp).toFixed(1)}%"></i></div></div></div>`;
+  const row = c => `<div class="rr" data-rvco="${esc(c.id)}"><div class="hd"><span class="tag ${c.kind === 'rival' ? 't-blue' : 't-dash'}">${c.kind === 'rival' ? '동종' : '기타'}</span><b>${esc(coShort(c.label))}</b><span class="rec"><span class="w">${c.w}승</span> <span class="l">${c.l}패</span></span></div>
+    ${c.meet ? `<div class="tug"><div class="tb"><i class="w" style="width:${(c.w / c.meet * 100).toFixed(1)}%"></i><i class="l" style="width:${(c.l / c.meet * 100).toFixed(1)}%"></i></div>
+      <div class="last"><span class="dots">${c.last.map(x => `<i class="${x.win ? 'w' : 'l'}">${x.win ? '승' : '패'}</i>`).join('')}</span><span>최근 ${rvMd(c.last[0].bid.dt)} ${esc(c.last[0].bid.name)}</span></div></div>`
+      : `<div class="tug"><div class="last"><span>참여 ${c.n}회 · 우리와 맞붙은 적 없음</span></div></div>`}</div>`;
+  h += `<div class="sec">업체별 맞대결 <span class="n">많이 만난 순</span></div><div class="rl">${st.rivals.map(row).join('')}</div>`;
+  if (st.idle.length) h += `<p class="note">이 기간에 참여 기록이 없는 업체: ${st.idle.map(c => esc(c.label)).join(', ')}</p>`;
+  if (st.others.length) h += `<div class="sec">자주 만난 다른 업체 <span class="n">${st.others.length}곳</span></div><div class="rl">${st.others.map(row).join('')}</div>`;
+  return h + rvFill(f) + '<p class="note">업체는 감시 탭에서 더하고 빼요. 투찰률은 1순위가 아니어도 낸 값 모두의 평균이에요.</p>';
+}
+const rvFill = f => f && f.pct < 100 ? `<div class="card" style="margin-top:14px"><h2>지난 1년 자료 채우기 <span style="color:var(--muted);font-weight:600;font-size:12.5px">${f.pct}%</span></h2>
+  <div class="prog"><i style="width:${f.pct}%"></i></div><p class="sub" style="margin:0">${esc(f.note || '')} ${esc(f.from)}부터 채웠어요.</p></div>` : '';
+
+/* 업체 시트 · 개찰 시트 */
+function rvSpark(c, ours) {
+  const keys = [], t = new Date(rvToday() + 'T00:00:00Z');
+  for (let i = RV.per - 1; i >= 0; i--) keys.push(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() - i, 1)).toISOString().slice(0, 7));
+  const avg = (m, k) => m[k] ? m[k].reduce((a, b) => a + b, 0) / m[k].length : null;
+  const a = keys.map(k => avg(c.byMonth, k)), b = c.kind !== 'mine' ? keys.map(k => avg(ours.byMonth, k)) : [];
+  const vals = a.concat(b).filter(v => v != null), mine = a.filter(v => v != null);
+  if (mine.length < 2) return '<div class="spark"><div class="hd"><span>투찰률 흐름</span></div><p class="note" style="margin:8px 0">자료가 두 달 이상 쌓이면 흐름이 보여요</p></div>';
+  const lo = Math.min(...vals) - .1, hi = Math.max(...vals) + .1, W = 300, H = 84;
+  const X = i => i / (keys.length - 1) * W, Y = v => H - 6 - (v - lo) / (hi - lo) * (H - 12);
+  const line = (arr, at) => { let d = '', pen = false; arr.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; }); return d ? `<path d="${d}" ${at}/>` : ''; };
+  const col = c.kind === 'mine' ? 'var(--win)' : 'var(--accent)';
+  return `<div class="spark"><div class="hd"><span>투찰률 흐름 · 월 평균</span><span>최저 <b class="num">${pct2(Math.min(...mine))}</b> · 최고 <b class="num">${pct2(Math.max(...mine))}</b></span></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${line(b, 'fill="none" stroke="var(--win)" stroke-width="2" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"')}
+    ${line(a, `fill="none" stroke="${col}" stroke-width="2.5" vector-effect="non-scaling-stroke"`)}</svg>
+    <div class="ax"><span>${keys[0].slice(2).replace('-', '.')}</span>${b.length ? '<span>━ 이 업체 · ┅ 우리</span>' : ''}<span>${keys[keys.length - 1].slice(2).replace('-', '.')}</span></div></div>`;
+}
+function rvCoHtml(id) {
+  const bids = rvBids(), st = rvStats(bids), c = st.M[id];
+  if (!c) return '<div class="ak-empty">이 기간에 자료가 없어요</div>';
+  const best = b => { const r = b._p.filter(p => p.id === id && p.rank > 0).map(p => p.rank); return r.length ? Math.min(...r) : 0; };
+  const list = c.kind === 'mine' ? c.list : c.list.filter(b => b._our != null).concat(c.list.filter(b => b._our == null));
+  const rows = list.slice(0, 40).map(b => {
+    const r = best(b), our = b._our, res = c.kind !== 'mine' && our > 0 && r ? `<span class="res ${our < r ? 'w' : 'l'}">${our < r ? '승' : '패'}</span>` : '';
+    const chips = c.kind === 'mine' ? `<span class="m">우리 ${our ? our + '위' : '순위 없음'}</span>${our === 1 ? '' : `<span class="x">1순위 ${esc(coShort(b._top?.name || '-'))}</span>`}`
+      : `<span class="m">${our == null ? '우리 안 냄' : '우리 ' + (our ? our + '위' : '순위 없음')}</span><span class="o">${esc(coShort(c.label))} ${r ? r + '위' : '순위 없음'}</span>`;
+    return `<div class="crow" data-rvbid="${esc(b.key || b.no)}"><div class="nm"><b>${nm(b.name)}</b><small>${b.dt.slice(0, 10)} · ${esc(b.org)}</small></div><div class="rk">${chips}</div>${res}</div>`;
+  }).join('');
+  return `<div class="dt"><div class="tags" style="display:flex;gap:5px"><span class="tag ${c.kind === 'mine' ? 't-mine' : c.kind === 'rival' ? 't-blue' : 't-dash'}">${c.kind === 'mine' ? '우리' : c.kind === 'rival' ? '동종' : '기타'}</span></div>
+    <h2 style="color:var(--ink)">${c.kind === 'mine' ? '우리 (' + (S.d?.settings?.myCompanies || []).map(esc).join('·') + ')' : esc(coShort(c.label))}</h2>
+    <div class="org">최근 ${RV.per === 12 ? '1년' : RV.per + '개월'} · 전적에 쌓인 개찰 ${bids.length}건 중</div>
+    ${rvG3(c)}${rvSpark(c, st.ours)}${c.kind === 'mine' ? rvTug(st.ours, 1) : rvTug(c)}
+    <div class="sec">${c.kind === 'mine' ? '참여한 개찰' : '함께 참여한 개찰'} <span class="n">${c.list.length}건${c.list.length > 40 ? ' · 최근 40건' : ''}</span></div>
+    <div class="clist">${rows}</div></div>`;
+}
+function rvBidHtml(key) {
+  const b = (S.rv?.bids || []).find(x => (x.key || x.no) === key); if (!b) return '<div class="ak-empty">개찰을 찾지 못했어요</div>';
+  rvClassify(b);
+  return `<div class="dt">${RV.stack.length ? '<button class="back" data-rvback type="button">‹ 업체로 돌아가기</button>' : ''}
+    <div class="tags" style="display:flex;gap:5px">${b._our === 1 ? '<span class="tag t-go">우리 낙찰</span>' : b._our != null ? `<span class="tag t-mine">우리 ${b._our ? b._our + '위' : '순위 없음'}</span>` : ''}</div>
+    <h2>${nm(b.name)}</h2><div class="org">${esc(b.org)}</div>
+    <dl class="facts"><dt>공고번호</dt><dd>${esc(b.no)}-${esc(b.ord || '000')}</dd><dt>개찰일시</dt><dd>${esc(b.dt)}</dd><dt>참가업체</dt><dd>${b.prtcpt || b.b.length}개</dd>
+      ${b._top ? `<dt>1순위</dt><dd>${esc(coShort(b._top.name))} ${pct2(b._top.rate)}</dd>` : ''}</dl>
+    <table class="bd"><tr><th>순위</th><th>업체</th><th class="r">투찰금액</th><th class="r">투찰률</th></tr>
+    ${b._p.map(p => `<tr class="${p.mine ? 'mine' : p.rival ? 'rival' : ''}" data-rvco="${esc(p.id)}"><td>${p.rank || '-'}</td><td class="nm">${esc(p.name)}${p.rmrk && p.rmrk !== '정상' ? '<br><small style="color:var(--muted)">' + esc(p.rmrk) + '</small>' : ''}</td><td class="r num">${won(p.amount)}</td><td class="r num">${pct2(p.rate)}</td></tr>`).join('')}</table>
+    <p class="note">업체 줄을 누르면 그 업체 전적이 열려요.</p></div>`;
+}
+function rvOpenCo(id) { RV.cur = id; RV.stack = []; const box = document.getElementById('sheetBody'); box.innerHTML = rvCoHtml(id); box.scrollTop = 0; if (!sheet.isOpen) sheet.open(); }
+function rvOpenBid(key, fromCo) { if (fromCo) RV.stack.push(fromCo); else RV.stack = []; const box = document.getElementById('sheetBody'); box.innerHTML = rvBidHtml(key); box.scrollTop = 0; if (!sheet.isOpen) sheet.open(); }
+document.addEventListener('click', e => {
+  const t = e.target;
+  const per = t.closest('[data-rvper]'); if (per) { RV.per = +per.dataset.rvper; LS.set('rvPer', RV.per); return redrawKeep(); }
+  if (t.closest('[data-rvreload]')) { RV.err = ''; return loadRivals(true); }
+  if (t.closest('[data-rvback]')) { const p = RV.stack.pop(); if (p) rvOpenCo(p); return; }
+  const bid = t.closest('[data-rvbid]'); if (bid) return rvOpenBid(bid.dataset.rvbid, t.closest('#sheet') ? RV.cur : null);
+  const co = t.closest('[data-rvco]'); if (co) return rvOpenCo(co.dataset.rvco);
+});
+
+/* 예시 자료: 지난 1년 해양·공간정보 용역 개찰 (서버 '전적'과 같은 모양) */
+function demoRivals() {
+  let seed = 20261121; const R = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const pick = a => a[Math.floor(R() * a.length)], today = new Date(AppKit.kstDate() + 'T00:00:00Z');
+  const CO = [['(주)올포랜드', .6, .8], ['(주)엘티메트릭', .25, 1.0], ['(주)유에스티21', .42, .72], ['(주)해양정보기술', .38, .9], ['(주)그린블루', .22, 1.1], ['(주)지오스토리', .33, null], ['(주)파이텍', .27, .85]];
+  const OTHERS = ['(주)한국공간정보', '(주)바다엔지니어링', '지오솔루션(주)', '(주)씨엠아이에스', '(주)디지털맵스', '(주)에코지아이에스', '(주)한국해양기술', '(주)이에스피', '(주)나라지리정보', '(주)오션테크', '(주)웨이브랩', '대한측량(주)'];
+  const OA = OTHERS.map(() => .8 + R() * .5);
+  const PLACE = ['부산항', '인천항', '여수·광양항', '울산항', '목포항', '동해', '서해', '남해', '제주', '새만금', '포항', '군산', ''];
+  const SUBJ = ['해양공간정보', '연안침식', '해저지형', '조석관측', '해양관측망', '수치해도', '해양조사', '항만시설', '해양환경', '어항', '해양예보', '국가해양지도', '연안재해'];
+  const WORK = ['시스템 유지관리', 'DB 구축', '고도화', '정보화전략계획(ISP) 수립', '통합플랫폼 구축', '데이터 품질관리', '서비스 운영', '현행화', '3차원 모델 구축'];
+  const ORG = ['국립해양조사원', '국립해양조사원', '해양수산부', '해양수산부', '부산지방해양수산청', '인천지방해양수산청', '국토지리정보원', '해양환경공단', '한국해양과학기술원'];
+  const bids = [];
+  for (let i = 0; i < 180; i++) {
+    const off = Math.floor(R() * 365), d = new Date(today - off * 864e5), t = 1 - off / 365, ymd = d.toISOString().slice(0, 10), place = pick(PLACE);
+    const name = `${ymd.slice(0, 4)}년 ${place ? place + ' ' : ''}${pick(SUBJ)} ${pick(WORK)} 용역${R() < .12 ? '(2차)' : ''}`, base = Math.round((1 + R() * R() * 30) * 10) * 1e7;
+    const people = []; CO.forEach(([n, p, a]) => { if (R() < p) people.push([n, a == null ? 1.25 - .65 * t : a]); });
+    if (!people.length) people.push([CO[0][0], .8]);
+    people.push(...OTHERS.map((n, j) => [n, OA[j]]).sort(() => R() - .5).slice(0, 2 + Math.floor(R() * 8)));
+    const b = people.map(([n, a]) => [0, n, +(87.765 + Math.pow(R(), 1.4) * 2.3 * a).toFixed(3)]).sort((x, y) => x[2] - y[2])
+      .map((x, j) => [j + 1, x[1], x[2], Math.round(base * x[2] / 100 / 1000) * 1000, '정상']);
+    const no = `R${ymd.slice(2, 4)}BK0${1000000 + Math.floor(R() * 899999)}`;
+    bids.push({ key: no + '|000|0|0', no, ord: '000', name, org: pick(ORG), dt: `${ymd} ${pick(['10', '11', '14', '15', '16'])}:00`, prtcpt: b.length, status: '개찰완료', base, b });
+  }
+  bids.sort((x, y) => y.dt.localeCompare(x.dt));
+  return { bids, today: AppKit.kstDate(), fill: { from: AppKit.addDays(AppKit.kstDate(), -252), pct: 69, bids: bids.length, note: '지난 1년치를 평일 새벽과 주말에 조금씩 채우고 있어요.' } };
+}
+
+const rvShown = () => tabs.current === 'rival';
+
+
 /* ───────── 탭·클릭 ───────── */
 const tabs = AppKit.tabs({
-  ids: ['feed', 'search', 'watch', 'set'], remember: 'g2b-alert.tab', start: hashOpt('tab'),
+  ids: ['feed', 'search', 'watch', 'rival', 'set'], remember: 'g2b-alert.tab', start: hashOpt('tab'),
   render(id) {
     const sc = document.getElementById('sc');
-    sc.innerHTML = id === 'feed' ? renderFeed() : id === 'search' ? renderSearch() : id === 'watch' ? renderWatch() : renderSet();
+    sc.innerHTML = id === 'feed' ? renderFeed() : id === 'search' ? renderSearch() : id === 'watch' ? renderWatch() : id === 'rival' ? renderRival() : renderSet();
   },
 });
 if (hashOpt('tab')) tabs.go(hashOpt('tab'), 0);
