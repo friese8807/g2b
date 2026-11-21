@@ -64,6 +64,8 @@ function handle_(req) {
     if (!tok || req.token !== tok) return { ok: false, code: 'auth', message: '연결 암호가 맞지 않아요. 설정에서 다시 연결해 주세요' };
     const a = req.action;
     if (a === 'load') return ok_(snapshot_());
+    if (a === 'rivalLoad') { try { rivalInstall_(); } catch (e) {} return ok_(rivalLoad_()); }
+    if (a === 'rivalSettings') { rivalSettings_(req); return ok_(rivalLoad_()); }
     if (a === 'widget') return ok_(widget_());
     if (a === 'search') return ok_(search_(req.text || '', Number(req.days) || 30, req.kinds || settings_().kinds));
     if (a === 'watch') { addWatch_(req.item); return ok_(snapshot_()); }
@@ -483,12 +485,15 @@ function check_(force) {
       coDictAdd_(pairs);
     } catch (e) { console.warn('업체 사전 저장 실패: ' + e); }
     let changed = false;
+    const rivalNew = [];
     todo.forEach(k => {
       const raw = found[k], status = raw.progrsDivCdNm || '개찰';
       let bd = lists[k];
       // 유찰·재입찰은 참가업체 목록 대신 1순위 정보(opengCorpInfo)만 본다
       if (!bd) { const t = parseTop_(raw.opengCorpInfo); bd = t ? [markCo_({ rank: 1, name: t.name, amount: Number(t.amount) || 0, rate: Number(t.rate) || 0, rmrk: '' }, s)] : []; }
       const hasMine = bd.some(b => b.mine), hasRival = bd.some(b => b.rival);
+      // 경쟁사 수첩: 참가업체 전체 순위를 '전적'에 쌓는다 (추가 호출 없음)
+      if ((hasMine || hasRival) && lists[k] && lists[k].length) rivalNew.push(rivalRow_(raw, lists[k]));
       if (!raw._via) raw._via = hasMine ? '우리 회사 참여' : hasRival ? '동종업체 참여' : '';
       if (!raw._via) { cache.put('chk|' + k + '|' + status, '1', 21600); return; }
       const r = buildResult_(raw, s, bd);
@@ -498,6 +503,7 @@ function check_(force) {
       W.forEach(w => { if (w.no === r.no) { w.status = status; changed = true; } });
     });
     if (changed) writeWatches_(W);
+    if (rivalNew.length) { try { rivalAppend_(rivalNew); } catch (e) { console.warn('전적 저장 실패: ' + e); } }
     P.deleteProperty('lastErrText');
   } catch (e) {
     console.error(e);
@@ -1106,3 +1112,154 @@ function testNotify() {
 
 /** 자동 확인 끄기 */
 function stop() { ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'check').forEach(t => ScriptApp.deleteTrigger(t)); }
+
+// ════════════════════════ 경쟁사 수첩 (friese8807/rival-book) ════════════════════════
+// 우리 회사·동종업체가 참여한 개찰을 참가업체 전체 순위와 함께 '전적' 시트에 쌓는다.
+//  - 새 개찰: check_() 가 이미 받아 온 참가업체 목록을 그대로 저장 (나라장터 추가 호출 없음)
+//  - 지난 1년: rivalFill() 이 매시 한 번, 1분 남짓씩 하루치씩 거꾸로 채운다
+//    · 공공데이터 개발계정 한도(하루 약 1,000회)를 개찰알림 1분 감시가 평일에 거의 다 쓴다
+//      → 평일은 새벽 0~6시에 150회까지만, 감시가 쉬는 주말은 하루 종일 800회까지 (오늘 전체 호출이 900회를 넘으면 멈춤)
+//    · 운영계정으로 한도를 늘렸으면 스크립트 속성 RF_DAILY_CALLS(하루 채우기 호출 수)를 크게 하면 빨리 끝난다
+//    · 실행 시간: 평일 7분 안쪽(감시는 8~20시라 겹치지 않음), 주말 최대 24분 — 무료 계정 하루 90분 안
+//  - 동종업체·우리 회사 목록은 개찰알림 알림 설정과 같은 목록을 쓴다
+const RIVAL_APP_URL = 'https://friese8807.github.io/rival-book/';
+const RIVAL_COLS = ['키', '공고번호', '사업명', '기관', '개찰일시', '참가', '상태', '추정가격', 'json'];
+// 지난 자료를 채울 때 참가업체 목록을 받아 볼 개찰(해양·공간정보 쪽). 1순위가 우리·동종이면 이 조건과 상관없이 본다
+const RIVAL_FIELD = /해양|바다|해도|수로|항만|항로|연안|어항|어촌|수산|해저|해상|조석|조류|해류|파랑|관측|공간정보|지리정보|GIS|지도|측량|3차원|디지털\s*트윈|위성|해역|도서|갯벌|해안|선박|해사/i;
+const RIVAL_ORG = /해양|수산|조사원|지리정보원|해양경찰|해경|항만/;
+
+function rivalSheet_() {
+  const ss = book_();
+  let sh = ss.getSheetByName('전적');
+  if (!sh) { sh = ss.insertSheet('전적'); sh.appendRow(RIVAL_COLS); sh.getRange('A:H').setNumberFormat('@'); }
+  return sh;
+}
+
+/** 개찰결과 한 건 + 참가업체 목록 → '전적' 시트 한 줄 */
+function rivalRow_(raw, list) {
+  const b = list.map(x => [x.rank || 0, x.name, Number(x.rate) || 0, Number(x.amount) || 0, x.rmrk || '']);
+  return [keyOf_(raw), String(raw.bidNtceNo || '').trim(), raw.bidNtceNm || '', raw.dminsttNm || raw.ntceInsttNm || '',
+    String(raw.opengDt || '').slice(0, 16), String(raw.prtcptCnum || list.length), raw.progrsDivCdNm || '개찰완료',
+    String(Number(raw.presmptPrce || raw.asignBdgtAmt || 0) || ''), JSON.stringify(b)];
+}
+
+/** 처음 보는 키만 덧붙인다 (have: 이미 있는 키) */
+function rivalAppend_(rows, have) {
+  const sh = rivalSheet_();
+  if (!have) { have = {}; rows_(sh).forEach(r => { have[r[0]] = 1; }); }
+  const add = rows.filter(r => !have[r[0]] && (have[r[0]] = 1));
+  if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, RIVAL_COLS.length).setValues(add);
+  return add.length;
+}
+
+/** 동종업체 묶음 ('유에스티21/UST21' 처럼 다른 이름은 / 로). 앱에서 고친 것이 있으면 그것, 없으면 알림 설정에서 만든다 */
+function rivalGroups_(s) {
+  try { const g = JSON.parse(P.getProperty('rivalGroups') || 'null'); if (g && g.length) return g; } catch (e) {}
+  const list = (s.rivals || []).slice(), out = [];
+  const iU = list.indexOf('UST21'), iY = list.indexOf('유에스티21');
+  if (iU >= 0 && iY >= 0) { out.push('유에스티21/UST21'); list.splice(Math.max(iU, iY), 1); list.splice(Math.min(iU, iY), 1); }
+  return out.concat(list);
+}
+function rivalSettings_(inp) {
+  const clean = v => (Array.isArray(v) ? v : []).map(x => String(x).trim().slice(0, 60)).filter(Boolean).slice(0, 30);
+  const patch = {};
+  if (inp.rivals) { const g = clean(inp.rivals); P.setProperty('rivalGroups', JSON.stringify(g)); patch.rivals = [].concat.apply([], g.map(x => x.split('/'))).map(x => x.trim()).filter(Boolean); }
+  if (inp.ours) { const o = clean(inp.ours); if (o.length) patch.myCompanies = o; }
+  if (Object.keys(patch).length) saveSettings_(patch);
+}
+
+/** 앱이 부르는 자료: 최근 1년 전적 + 채우기 진행 + 목록 */
+function rivalLoad_() {
+  const s = settings_(), today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  const cut = Utilities.formatDate(new Date(Date.now() - 366 * 864e5), TZ, 'yyyy-MM-dd');
+  const bids = [];
+  rows_(rivalSheet_()).forEach(r => {
+    const dt = String(r[4] || '');
+    if (dt.slice(0, 10) <= cut) return;
+    let b = []; try { b = JSON.parse(r[8] || '[]'); } catch (e) {}
+    bids.push({ key: String(r[0]), no: String(r[1]), ord: String(r[0]).split('|')[1] || '', name: String(r[2]), org: String(r[3]), dt: dt,
+      prtcpt: Number(r[5]) || b.length, status: String(r[6] || '개찰완료'), base: Number(r[7]) || 0, b: b });
+  });
+  bids.sort((a, b) => b.dt.localeCompare(a.dt));
+  const done = Math.max(0, Number(P.getProperty('rfDays') || 1) - 1);
+  return {
+    bids: bids, today: today,
+    fill: { from: Utilities.formatDate(new Date(Date.now() - done * 864e5), TZ, 'yyyy-MM-dd'), to: today, pct: Math.min(100, Math.round(done / 365 * 100)),
+      bids: bids.length, at: P.getProperty('rfAt') || '',
+      note: done >= 365 ? '지난 1년치를 다 채웠어요. 새 개찰은 개찰알림이 받을 때마다 더해져요.'
+        : (P.getProperty('rfErr') ? '마지막 채우기 오류: ' + P.getProperty('rfErr') : '지난 1년치를 평일 새벽과 주말에 조금씩 채우고 있어요(개찰알림 호출 한도를 남겨 두려고요). 새 개찰은 바로 더해져요.') },
+    settings: { rivals: rivalGroups_(s), ours: s.myCompanies && s.myCompanies.length ? s.myCompanies : [s.myName] },
+  };
+}
+
+/** 하루치 개찰결과(용역)에서 우리·동종이 참여한 것을 찾아 줄로 만든다. 돌려주는 값: { rows, calls, seen } */
+function rivalDay_(ymd, s, have) {
+  const p = { inqryDiv: '3', inqryBgnDt: ymd + '0000', inqryEndDt: ymd + '2359' };
+  const first = call_(SCRS + 'getOpengResultListInfoServc', Object.assign({ numOfRows: 20, pageNo: 1 }, p));
+  let items = items_(first), calls = 1;
+  const pages = Math.min(40, Math.ceil(Number(first.totalCount || 0) / 20));
+  if (pages > 1) {
+    const more = [];
+    for (let pg = 2; pg <= pages; pg++) more.push({ url: SCRS + 'getOpengResultListInfoServc', params: Object.assign({ numOfRows: 20, pageNo: pg }, p) });
+    fetchMany_(more).forEach(x => { if (x.body) items = items.concat(items_(x.body)); });
+    calls += more.length;
+  }
+  const isUs = name => { const b = markCo_({ name: name }, s); return b.mine || b.rival; };
+  const cand = items.filter(r => (r.progrsDivCdNm || '') === '개찰완료' && !have[keyOf_(r)]
+    && (RIVAL_FIELD.test(r.bidNtceNm || '') || RIVAL_ORG.test((r.ntceInsttNm || '') + ' ' + (r.dminsttNm || '')) || (parseTop_(r.opengCorpInfo) && isUs(parseTop_(r.opengCorpInfo).name))));
+  const lists = biddersMany_(cand, s);
+  calls += cand.length;
+  const rows = cand.filter(r => (lists[keyOf_(r)] || []).some(b => b.mine || b.rival)).map(r => rivalRow_(r, lists[keyOf_(r)]));
+  return { rows: rows, calls: calls, seen: items.length, cand: cand.length };
+}
+
+/** 트리거(매시): 새벽 0~6시에만 지난 자료를 하루씩 거꾸로 채운다 */
+function rivalFill() { rivalFill_(false); }
+/** 편집기에서 바로 한 번 돌려 보기 (시간대 상관없이) */
+function rivalFillNow() { rivalFill_(true); console.log(JSON.stringify(rivalLoad_().fill)); }
+
+function rivalFill_(force) {
+  const t0 = Date.now(), now = new Date(), s0 = settings_();
+  const rest = !activeNow_(now, s0) && Number(Utilities.formatDate(now, TZ, 'u')) >= 6;   // 주말(감시 쉬는 날)
+  if (!force && !rest && Number(Utilities.formatDate(now, TZ, 'H')) >= 7) return;
+  let cur = Number(P.getProperty('rfDays') || 1);
+  if (cur > 365) return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return;
+  try {
+    const s = s0, sh = rivalSheet_(), have = {};
+    rows_(sh).forEach(r => { have[r[0]] = 1; });
+    const own = P.getProperty('RF_DAILY_CALLS'), cap = Number(own || (rest ? 800 : 150)), ck = 'rfCalls|' + day_();
+    let used = Number(P.getProperty(ck) || 0);
+    const roomy = () => own || Number(P.getProperty('calls|' + day_()) || 0) < 900;   // 개찰알림 몫을 남긴다
+    // 한 번에 1분 남짓만 (하루치를 시작했으면 끝까지)
+    while (cur <= 365 && Date.now() - t0 < 60e3 && used < cap && roomy()) {
+      const ymd = Utilities.formatDate(new Date(now - cur * 864e5), TZ, 'yyyyMMdd');
+      const res = rivalDay_(ymd, s, have);
+      rivalAppend_(res.rows, have);
+      used += res.calls; cur++;
+      P.setProperty('rfDays', String(cur)); P.setProperty(ck, String(used));
+      console.log(ymd + ' 개찰 ' + res.seen + '건 · 살펴본 것 ' + res.cand + '건 · 저장 ' + res.rows.length + '건');
+    }
+    P.setProperty('rfAt', now_());
+    P.deleteProperty('rfErr');
+  } catch (e) {
+    console.error(e);
+    P.setProperty('rfErr', Utilities.formatDate(new Date(), TZ, 'MM/dd HH:mm') + ' ' + plain_(e));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 매시 채우기 트리거 (없으면 건다). 다 채우면 rivalFill_ 이 바로 끝나므로 그대로 둬도 된다 */
+function rivalInstall_() {
+  if (ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'rivalFill')) return;
+  ScriptApp.newTrigger('rivalFill').timeBased().everyHours(1).create();
+}
+
+/** 경쟁사 수첩 연결 링크를 실행 기록에 찍는다 (휴대폰에서 열면 앱이 이 서버에 연결된다) */
+function rivalLink() {
+  rivalSheet_(); rivalInstall_();
+  const url = ScriptApp.getService().getUrl();
+  console.log(RIVAL_APP_URL + '#setup=' + encodeURIComponent(Utilities.base64Encode(JSON.stringify({ url: url, token: P.getProperty('APP_TOKEN') }), Utilities.Charset.UTF_8)));
+}
