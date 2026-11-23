@@ -630,7 +630,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1795402678';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1795407150';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -1089,7 +1089,7 @@ function rvClassify(bid) {
   if (bid._sig === sig) return bid;
   bid._sig = sig;
   bid._p = bid.b.map(([rank, name, rate, amount, rmrk]) => {
-    const n = coNorm(name), mine = ours.some(k => n.indexOf(k) >= 0), r = !mine && rv.find(e => coNorm(e) && n.indexOf(coNorm(e)) >= 0);
+    const n = coNorm(name), mine = ours.some(k => n.indexOf(k) >= 0) || (!!bid.cons && n.indexOf(coNorm(bid.cons)) >= 0), r = !mine && rv.find(e => coNorm(e) && n.indexOf(coNorm(e)) >= 0);
     return { rank, name, rate, amount, rmrk, mine, rival: !!r, id: mine ? '우리' : r ? r : coShort(name) };
   });
   const m = bid._p.filter(p => p.mine && p.rank > 0).map(p => p.rank);

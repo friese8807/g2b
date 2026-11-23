@@ -1250,13 +1250,16 @@ function rivalLoad_() {
   try { rivalSeed_(); } catch (e) { console.warn('결과 옮기기 실패: ' + e); }
   const s = settings_(), today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const cut = Utilities.formatDate(new Date(Date.now() - 366 * 864e5), TZ, 'yyyy-MM-dd');
-  const bids = [];
+  const bids = [], cons = {};
+  // 컨소시엄 대표사로 들어간 개찰: 그 대표사를 '우리'로 센다 (감시 공고의 대표사, 계약정보로 확인한 결과)
+  try { watches_().forEach(w => { if (w.lead) cons[w.no] = w.lead; }); } catch (e) {}
+  try { rows_(sheet_('결과')).forEach(r => { try { const o = JSON.parse(r[9]); if (o.mine && o.mine.cons) cons[o.no] = o.mine.name; } catch (e) {} }); } catch (e) {}
   rows_(rivalSheet_()).forEach(r => {
     const dt = String(r[4] || '');
     if (dt.slice(0, 10) <= cut) return;
     let b = []; try { b = JSON.parse(r[8] || '[]'); } catch (e) {}
     bids.push({ key: String(r[0]), no: String(r[1]), ord: String(r[0]).split('|')[1] || '', name: String(r[2]), org: String(r[3]), dt: dt,
-      prtcpt: Number(r[5]) || b.length, status: String(r[6] || '개찰완료'), base: Number(r[7]) || 0, b: b });
+      prtcpt: Number(r[5]) || b.length, status: String(r[6] || '개찰완료'), base: Number(r[7]) || 0, b: b, cons: cons[String(r[1])] || '' });
   });
   bids.sort((a, b) => b.dt.localeCompare(a.dt));
   const done = Math.max(0, Number(P.getProperty('rfDays') || 1) - 1);
