@@ -630,7 +630,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1795396931';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1795402678';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -753,8 +753,8 @@ async function refresh() {
     const d = await AppKit.spin('#refresh', api('load'));
     if (!seq.is(mine)) return;
     setData(d); S.lastOk = new Date();
-    document.getElementById('dot').className = 'ak-dot live';
-    document.getElementById('st').textContent = AppKit.hhmm(S.lastOk) + ' 갱신';
+    document.getElementById('dot').className = S.demo ? 'ak-dot off' : 'ak-dot live';   // 예시 화면을 실제 자료로 착각하지 않게
+    document.getElementById('st').textContent = S.demo ? '예시 화면 · 설정에서 연결' : AppKit.hhmm(S.lastOk) + ' 갱신';
   } catch (e) {
     document.getElementById('dot').className = 'ak-dot off';
     document.getElementById('st').textContent = S.lastOk ? AppKit.hhmm(S.lastOk) + ' 이후 연결 안 됨' : '연결 안 됨';
