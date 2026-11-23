@@ -70,6 +70,7 @@ function handle_(req) {
     if (a === 'search') return ok_(search_(req.text || '', Number(req.days) || 30, req.kinds || settings_().kinds));
     if (a === 'watch') { addWatch_(req.item); return ok_(snapshot_()); }
     if (a === 'unwatch') { removeWatch_(req.no); return ok_(snapshot_()); }
+    if (a === 'watchLead') { setLead_(String(req.no || ''), String(req.lead || '').trim()); return ok_(snapshot_()); }
     if (a === 'saveSettings') { saveSettings_(req.settings || {}); return ok_(snapshot_()); }
     if (a === 'read') { markRead_(req.all ? null : req.keys || []); return ok_({ done: true }); }
     if (a === 'detail') return ok_(detail_(req.key, req.no, req.ord));
@@ -179,8 +180,63 @@ function addWatch_(item) {
   const list = watches_().filter(w => w.no !== item.no);
   list.unshift({ no: item.no, ord: item.ord || '', name: item.name, org: item.org, demand: item.demand, opengDt: item.opengDt,
     closeDt: item.closeDt, price: item.price, kind: item.kind || 'Servc', urgent: !!item.urgent, url: item.url || '', info: item.info || [],
-    status: '대기', addedAt: now_() });
+    status: '대기', addedAt: now_(), lead: item.lead || '' });
   writeWatches_(list);
+}
+/** 감시 공고에 '우리 컨소시엄 대표사'를 적어 두고, 이미 받은 결과도 바로 다시 맞춘다 */
+function setLead_(no, lead) {
+  const W = watches_(), w = W.find(x => x.no === no);
+  if (!w) throw new Error('감시 중인 공고가 아니에요');
+  w.lead = lead; writeWatches_(W);
+  consortFix_(no);
+}
+
+/* ── 컨소시엄: 대표사 이름으로 투찰한 개찰을 '우리' 것으로 바꾼다 ──
+   나라장터 개찰결과에는 대표사 이름만 나와서, 우리가 구성원이면 알 수 없다.
+   A) 감시 공고에 적어 둔 대표사(lead)가 참가업체에 있으면 그 업체 순위를 우리 순위로
+   B) 1순위의 계약정보(공동수급 구성사, 계약 뒤에 나옴)에 우리 회사가 있으면 1순위를 우리 것으로 */
+const CNTRCT = 'https://apis.data.go.kr/1230000/ao/CntrctInfoService/getCntrctInfoListServc';
+function consortMembers_(no) {
+  const out = [];
+  fetchAll_(CNTRCT, { inqryDiv: '4', bidNtceNo: no }, 5, 1).forEach(x => {
+    // "[1^주계약업체^공동^업체명^대표자^국적^지분율…][2^…]" 꼴: 칸마다 업체명을 꺼낸다
+    const raw = Object.keys(x).filter(k => /corp/i.test(k)).map(k => String(x[k] || '')).join('');
+    raw.split(/\]\s*\[|\[|\]/).filter(Boolean).forEach(seg => {
+      const f = seg.split('^').map(t => t.trim());
+      const name = f[3] && /[가-힣A-Za-z]/.test(f[3]) ? f[3] : f.find(t => /주식회사|\(주\)|㈜|법인/.test(t));
+      if (name) out.push(name);
+    });
+  });
+  return out;
+}
+function consortMark_(r, hit) {
+  const nm = coNorm_(hit.name);
+  (r.bidders || []).forEach(b => { if (coNorm_(b.name) === nm) { b.mine = true; b.rival = false; b.cons = true; } });
+  r.mine = { rank: hit.rank || 0, amount: hit.amount || 0, rate: hit.rate || 0, name: hit.name, cons: true };
+  r.ours = [{ name: hit.name, rank: hit.rank || 0, rate: hit.rate || 0, cons: true }];
+  r.rivals = (r.rivals || []).filter(b => coNorm_(b.name) !== nm);
+  r.via = '우리 컨소시엄';
+}
+function consortFix_(onlyNo) {
+  const s = settings_(), sh = sheet_('결과'), rs = rows_(sh), leads = {};
+  watches_().forEach(w => { if (w.lead) leads[w.no] = coNorm_(w.lead); });
+  const from = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), TZ, 'yyyy-MM-dd');
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  let calls = 0;
+  rs.forEach((row, i) => {
+    let r; try { r = JSON.parse(row[9]); } catch (e) { return; }
+    if ((onlyNo && r.no !== onlyNo) || r.mine || r.status !== '개찰완료' || !r.top || String(r.at).slice(0, 10) < from) return;
+    let hit = null, touched = false;
+    if (leads[r.no]) hit = (r.bidders || []).find(b => coNorm_(b.name).indexOf(leads[r.no]) >= 0) || null;
+    // B는 하루 한 번, 한 번에 10건까지 (계약은 개찰 며칠 뒤에 올라온다)
+    if (!hit && !onlyNo && calls < 10 && (!r.cons || r.cons < today)) {
+      calls++; touched = true; r.cons = today;
+      let mem = []; try { mem = consortMembers_(r.no); } catch (e) { console.warn('계약정보 ' + r.no + ': ' + e); }
+      if (mem.length > 1 && mem.some(m => markCo_({ name: m }, s).mine)) hit = (r.bidders || []).find(b => b.rank === 1) || Object.assign({ rank: 1 }, r.top);
+    }
+    if (hit) { consortMark_(r, hit); touched = true; }
+    if (touched) sh.getRange(i + 2, 8, 1, 3).setValues([[r.mine ? r.mine.rank : '', hit ? 'N' : row[8], JSON.stringify(r)]]);
+  });
 }
 function removeWatch_(no) { writeWatches_(watches_().filter(w => w.no !== no)); }
 
@@ -491,6 +547,9 @@ function check_(force) {
       let bd = lists[k];
       // 유찰·재입찰은 참가업체 목록 대신 1순위 정보(opengCorpInfo)만 본다
       if (!bd) { const t = parseTop_(raw.opengCorpInfo); bd = t ? [markCo_({ rank: 1, name: t.name, amount: Number(t.amount) || 0, rate: Number(t.rate) || 0, rmrk: '' }, s)] : []; }
+      // 감시 공고에 적어 둔 컨소시엄 대표사는 우리로 본다 (알림 보내기 전에)
+      const lw = W.find(w => w.lead && w.no === String(raw.bidNtceNo).trim());
+      if (lw) bd.forEach(b => { if (coNorm_(b.name).indexOf(coNorm_(lw.lead)) >= 0) { b.mine = true; b.rival = false; b.cons = true; } });
       const hasMine = bd.some(b => b.mine), hasRival = bd.some(b => b.rival);
       // 경쟁사 수첩: 참가업체 전체 순위를 '전적'에 쌓는다 (추가 호출 없음)
       if ((hasMine || hasRival) && lists[k] && lists[k].length) rivalNew.push(rivalRow_(raw, lists[k]));
@@ -504,6 +563,7 @@ function check_(force) {
     });
     if (changed) writeWatches_(W);
     if (rivalNew.length) { try { rivalAppend_(rivalNew); } catch (e) { console.warn('전적 저장 실패: ' + e); } }
+    try { consortFix_(); } catch (e) { console.warn('컨소시엄 확인 실패: ' + e); }
     P.deleteProperty('lastErrText');
   } catch (e) {
     console.error(e);
@@ -528,8 +588,8 @@ function buildResult_(raw, s, given) {
   };
   const all = given || (r.status === '개찰완료' ? bidders_(r, s) : []);
   const mine = all.filter(b => b.mine)[0];
-  if (mine) r.mine = { rank: mine.rank, amount: mine.amount, rate: mine.rate, name: mine.name };
-  r.ours = all.filter(b => b.mine).map(b => ({ name: b.name, rank: b.rank, rate: b.rate }));
+  if (mine) r.mine = { rank: mine.rank, amount: mine.amount, rate: mine.rate, name: mine.name, cons: !!mine.cons };
+  r.ours = all.filter(b => b.mine).map(b => ({ name: b.name, rank: b.rank, rate: b.rate, cons: !!b.cons }));
   r.rivals = all.filter(b => b.rival).map(b => ({ name: b.name, rank: b.rank, rate: b.rate }));
   // 상위 10곳 + 그 밖의 우리·동종업체
   r.bidders = all.slice(0, 10).concat(all.slice(10).filter(b => b.mine || b.rival));

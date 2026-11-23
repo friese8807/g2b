@@ -630,7 +630,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1795279258';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1795396931';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -735,6 +735,7 @@ async function demoApi(action, p) {
   }
   if (action === 'watch') { d.watches.unshift(Object.assign({}, p.item, { status: '대기' })); return d; }
   if (action === 'unwatch') { d.watches = d.watches.filter(w => w.no !== p.no); return d; }
+  if (action === 'watchLead') { const w = d.watches.find(x => x.no === p.no); if (w) w.lead = p.lead; return d; }
   if (action === 'saveSettings') { d.settings = Object.assign(d.settings, p.settings); return d; }
   if (action === 'read') { d.results.forEach(r => r.read = true); return d; }
   if (action === 'detail') return (d.results.find(r => r.key === p.key) || {}).bidders || [];
@@ -799,7 +800,7 @@ function cardA(r) {
     <div class="grid3">
       <div><small>${r.top || r.status !== '유찰' ? '1순위' : '결과'}</small><b>${r.top ? esc(coShort(r.top.name)) : r.status === '유찰' ? '유찰' : '-'}</b></div>
       <div><small>투찰률</small><b class="num">${r.top ? rate(r.top.rate) : '-'}</b></div>
-      ${r.mine ? `<div class="mine"><small>우리 순위</small><b class="num">${r.mine.rank || '-'}위</b></div>`
+      ${r.mine ? `<div class="mine"><small>${r.mine.cons ? '우리 컨소시엄' : '우리 순위'}</small><b class="num">${r.mine.rank || '-'}위</b></div>`
         : (r.rivals || []).length ? `<div class="rival"><small>동종 ${esc(coShort(r.rivals[0].name))}</small><b class="num">${r.rivals[0].rank || '-'}위${r.rivals.length > 1 ? ' 외 ' + (r.rivals.length - 1) : ''}</b></div>`
         : `<div><small>참가업체</small><b class="num">${r.prtcpt || 0}개</b></div>`}
     </div></div>`;
@@ -946,7 +947,7 @@ function renderWatch() {
     <p class="sub">${ph}</p><div class="chips" style="margin-top:0">${(st[k] || []).map(w => `<button class="chip ${cls}" data-rm="${k}" data-v="${esc(w)}" type="button">${esc(w)} <span class="x">✕</span></button>`).join('')}</div>
     <form class="sbox" data-addto="${k}" style="margin-top:10px"><input class="fld" style="margin:0;height:42px" placeholder="추가할 업체 이름" autocomplete="off"><button class="btn sm" style="height:42px" type="submit">추가</button></form></div>`;
   const wl = W.length ? W.map(w => `<div class="bc" data-notice="${esc(w.no)}"><div class="row"><div>
-      <div class="tags"><span class="tag ${statusCls(w.status)}">${esc(w.status || '대기')}</span>${w.urgent ? '<span class="tag t-urgent">긴급</span>' : ''}${w.status === '대기' && dday(w.opengDt) ? '<span class="tag t-violet">개찰 ' + dday(w.opengDt) + '</span>' : ''}</div>
+      <div class="tags"><span class="tag ${statusCls(w.status)}">${esc(w.status || '대기')}</span>${w.urgent ? '<span class="tag t-urgent">긴급</span>' : ''}${w.status === '대기' && dday(w.opengDt) ? '<span class="tag t-violet">개찰 ' + dday(w.opengDt) + '</span>' : ''}${w.lead ? '<span class="tag t-mine">컨소 ' + esc(w.lead) + '</span>' : ''}</div>
       <h3>${nm(w.name)}</h3><div class="org">${esc(w.demand || w.org)} · 개찰 ${mdhm(w.opengDt)}</div></div>
       <button class="star on" data-star="${esc(w.no)}" type="button">${IC.star}해제</button></div></div>`).join('')
     : '<div class="ak-empty">감시 중인 공고가 없어요. 검색 탭에서 별표를 눌러 추가하세요.</div>';
@@ -1015,6 +1016,7 @@ async function openNotice(no) {
       <h2>${nm(n.name)}</h2><div class="org">${esc(n.org)}${n.demand && n.demand !== n.org ? ' · ' + esc(n.demand) : ''}</div>
       ${loading ? '<div class="ak-empty">공고 정보를 불러오는 중…</div>' : d && d.info.length ? infoHtml(d.info)
         : `<dl class="facts"><dt>공고번호</dt><dd>${esc(n.no)}-${esc(n.ord || '000')}</dd><dt>입찰마감</dt><dd>${esc(n.closeDt || '-')}</dd><dt>개찰일시</dt><dd>${esc(n.opengDt || '-')}</dd><dt>추정가격</dt><dd>${wonFull(n.price)}</dd></dl>`}
+      ${on ? `<form class="sbox" id="leadForm" data-no="${esc(no)}" style="margin-top:14px"><input type="text" enterkeyhint="done" placeholder="컨소시엄 대표사 (우리가 구성원일 때)" value="${esc((S.d?.watches || []).find(x => x.no === no)?.lead || '')}" autocomplete="off"><button class="btn" type="submit">저장</button></form>` : ''}
       <button class="btn wide ${on ? 'ghost' : ''}" style="margin-top:14px" data-star="${esc(no)}" type="button">${on ? '감시 해제' : '★ 감시에 넣기 — 개찰결과가 나오면 알림'}</button>
       ${g2bLink(d && d.url, no)}</div>`;
   };
@@ -1030,11 +1032,12 @@ async function openDetail(key) {
   const r = (S.d?.results || []).find(x => x.key === key); if (!r) return;
   const box = document.getElementById('sheetBody');
   const draw = (bd, loading) => {
+    if (r.mine?.cons) bd.forEach(b => { if (b.name === r.mine.name) { b.mine = true; b.rival = false; } });
     box.innerHTML = `<div class="dt"><div class="tags" style="display:flex;gap:5px"><span class="tag ${statusCls(r.status)}">${esc(r.status)}</span><span class="tag">${esc(r.via || '')}</span></div>
       <h2>${nm(r.name)}</h2><div class="org">${esc(r.org)}${r.demand && r.demand !== r.org ? ' · ' + esc(r.demand) : ''}</div>
       <dl class="facts"><dt>공고번호</dt><dd>${esc(r.no)}-${esc(r.ord || '000')}</dd><dt>개찰일시</dt><dd>${esc(r.opengDt)}</dd><dt>참가업체</dt><dd>${r.prtcpt || 0}개</dd>
         ${r.top ? `<dt>1순위</dt><dd>${esc(r.top.name)}</dd><dt>1순위 금액</dt><dd class="num">${wonFull(r.top.amount)} (${rate(r.top.rate)})</dd>` : ''}
-        ${r.mine ? `<dt>우리 회사</dt><dd style="color:var(--mine-ink)">${(r.ours || []).length ? r.ours.map(b => esc(coShort(b.name)) + ' ' + (b.rank || '-') + '위').join(' · ') : (r.mine.rank || '-') + '위 · ' + rate(r.mine.rate)}</dd>` : ''}
+        ${r.mine ? `<dt>우리 회사</dt><dd style="color:var(--mine-ink)">${(r.ours || []).length ? r.ours.map(b => esc(coShort(b.name)) + ' ' + (b.rank || '-') + '위' + (b.cons ? ' (우리 컨소시엄 대표사)' : '')).join(' · ') : (r.mine.rank || '-') + '위 · ' + rate(r.mine.rate)}</dd>` : ''}
         ${(r.rivals || []).length ? `<dt>동종업체</dt><dd style="color:var(--p-blue-ink)">${r.rivals.map(b => esc(coShort(b.name)) + ' ' + (b.rank || '-') + '위').join(' · ')}</dd>` : ''}</dl>
       ${loading ? '<div class="ak-empty">업체별 순위를 불러오는 중…</div>' : bd.length ? `<table class="bd"><tr><th>순위</th><th>업체</th><th class="r">투찰금액</th><th class="r">투찰률</th></tr>
         ${bd.map(b => `<tr class="${b.mine ? 'mine' : b.rival ? 'rival' : ''}"><td>${b.rank || '-'}</td><td class="nm">${esc(b.name)}${b.rmrk && b.rmrk !== '정상' ? '<br><small style="color:var(--muted)">' + esc(b.rmrk) + '</small>' : ''}</td><td class="r num">${won(b.amount)}</td><td class="r num">${rate(b.rate)}</td></tr>`).join('')}</table>`
@@ -1274,6 +1277,11 @@ document.addEventListener('submit', async e => {
   e.preventDefault();
   if (e.target.id === 'sform') { document.activeElement?.blur(); return doSearch(); }
   if (e.target.id === 'dform') { document.activeElement?.blur(); return doDebar(); }
+  if (e.target.id === 'leadForm') {
+    document.activeElement?.blur(); const lead = e.target.querySelector('input').value.trim();
+    await mutate('watchLead', { no: e.target.dataset.no, lead }, lead ? '‘' + lead + '’ 순위를 우리 순위로 볼게요' : '컨소시엄 대표사를 지웠어요');
+    return redrawKeep();   // 시트 뒤 목록도 바로 바꾼다
+  }
   const k = e.target.dataset.addto;
   if (k) {
     const v = e.target.querySelector('input').value.trim(); if (!v) return;
