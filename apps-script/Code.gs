@@ -1226,6 +1226,7 @@ function rivalSettings_(inp) {
   if (inp.rivals) { const g = clean(inp.rivals); P.setProperty('rivalGroups', JSON.stringify(g)); patch.rivals = [].concat.apply([], g.map(x => x.split('/'))).map(x => x.trim()).filter(Boolean); }
   if (inp.ours) { const o = clean(inp.ours); if (o.length) patch.myCompanies = o; }
   if (Object.keys(patch).length) saveSettings_(patch);
+  try { rivalShare_(); } catch (e) {}
 }
 
 /** 처음 한 번: 개찰알림이 이미 받아 둔 결과(결과 시트, 최근 500건)에서 우리·동종이 참여한 것을 '전적'으로 옮긴다.
@@ -1295,7 +1296,14 @@ function rivalDay_(ymd, s, have) {
 }
 
 /** 트리거(매시): 새벽 0~6시에만 지난 자료를 하루씩 거꾸로 채운다 */
-function rivalFill() { rivalFill_(false); }
+function rivalFill() { rivalFill_(false); try { rivalShare_(); } catch (e) { console.warn('전적 공유', e); } }
+/** 올포오션(직원 앱)이 읽을 수 있게 전적 자료를 '공유' 탭에 써 둔다. 셀 하나에 5만 자까지라 4만 자씩 나눠 A열에 */
+function rivalShare_() {
+  const j = JSON.stringify(rivalLoad_()), ss = book_();
+  const sh = ss.getSheetByName('공유') || ss.insertSheet('공유');
+  const parts = []; for (let i = 0; i < j.length; i += 40000) parts.push([j.slice(i, i + 40000)]);
+  sh.clearContents(); sh.getRange(1, 1, parts.length, 1).setNumberFormat('@').setValues(parts);
+}
 /** 편집기에서 바로 한 번 돌려 보기 (시간대 상관없이) */
 function rivalFillNow() { rivalFill_(true); console.log(JSON.stringify(rivalLoad_().fill)); }
 
