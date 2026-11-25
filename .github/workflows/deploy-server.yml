@@ -15,7 +15,7 @@ permissions:
 env:
   CODE: apps-script/Code.gs        # 저장소 안 서버 코드 위치
   SCRIPT_ID: '1QNzNR_6yKs2lgRwm0F1gNgLSaWLwwYb64nk5CNTZCgqmZk3CH2d3rP2d'      # Apps Script 프로젝트 설정 > 스크립트 ID (비우면 찾아 줌)
-  DEPLOY_ID: ''      # 앱이 부르는 https://script.google.com/macros/s/○○○/exec 의 ○○○ (비우면 웹앱 배포가 하나일 때 그것)
+  DEPLOY_ID: 'AKfycbyStM79wc67XTZpyKDMjCI6ZkQTPB8s3zIyjH-CGnUBWPm9LznLijAi41rMar26GFwY'    # 앱이 부르는 https://script.google.com/macros/s/○○○/exec 의 ○○○ (비우면 웹앱 배포가 하나일 때 그것)
 jobs:
   deploy:
     runs-on: ubuntu-latest
