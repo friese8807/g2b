@@ -630,7 +630,7 @@ const AppKit = (() => {
 })();
 </script>
 <script>
-const BUILD = '1795407150';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
+const BUILD = '1795795722';            // version.txt 와 같은 숫자 — bump_version.py 가 함께 바꾼다
 AppKit.fixViewport();
 AppKit.autoUpdate(BUILD);
 AppKit.showErrors(BUILD);
@@ -708,6 +708,46 @@ function jsonp(url, params) {
     document.head.appendChild(s);
   });
 }
+/* ── 휴대폰 푸시 알림 (friese-mobile-webapp-kit · web-push) ──
+   Push.check() → 'on'|'off'|'home'|'no'|'denied'. Push.on(call, cfg) — call(action, payload) 은 서버 data 를 돌려주는 앱 함수,
+   cfg = { api: 서버 주소, extra: {token…} } 를 캐시 'push-cfg' 에 적어 sw.js 가 문구를 받아 오게 한다.
+   ★ Push.on 은 누른 직후 다른 await 보다 먼저 불러야 아이폰이 허용 창을 띄운다(맨 앞에서 requestPermission). */
+const Push = (() => {
+  const ok = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const ios = /iPhone|iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  const standalone = (() => { try { return !!navigator.standalone || matchMedia('(display-mode: standalone)').matches; } catch (e) { return false; } })();
+  let state = null;
+  const sub = async () => { const r = await navigator.serviceWorker.getRegistration(); return r && r.pushManager.getSubscription(); };
+  async function check() {
+    if (!ok()) return (state = ios && !standalone ? 'home' : 'no');
+    if (Notification.permission === 'denied') return (state = 'denied');
+    try { const s = await sub(); state = s && Notification.permission === 'granted' ? 'on' : 'off'; } catch (e) { state = 'off'; }
+    return state;
+  }
+  const b64u8 = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); const r = atob(s + '==='.slice((s.length + 3) % 4)); return Uint8Array.from(r, c => c.charCodeAt(0)); };
+  const u8b64u = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  async function on(call, cfg, extra) {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { state = perm === 'denied' ? 'denied' : 'off'; throw new Error('알림이 허용되지 않았어요'); }
+    const reg = await navigator.serviceWorker.register('sw.js'); await navigator.serviceWorker.ready;
+    const { key } = await call('pushKey', {});
+    let s = await reg.pushManager.getSubscription();
+    if (s && s.options && s.options.applicationServerKey && u8b64u(s.options.applicationServerKey) !== key) { await s.unsubscribe(); s = null; }
+    if (!s) s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u8(key) });
+    await call('pushSub', Object.assign({ endpoint: s.endpoint }, extra || {}));
+    const c = await caches.open('push-cfg'); await c.put('cfg', new Response(JSON.stringify(cfg)));
+    return (state = 'on');
+  }
+  async function off(call) { const s = await sub(); if (s) { await call('pushOff', { endpoint: s.endpoint }); await s.unsubscribe(); } return (state = 'off'); }
+  async function test(call) {
+    const s = await sub(); if (!s) throw new Error('알림이 꺼져 있어요');
+    const d = await call('pushTest', { endpoint: s.endpoint }); const t = String(((d && d.res) || [])[0] || '');
+    if (!/^20[01]/.test(t)) throw new Error('보내지 못했어요: ' + (t || '서버 응답 없음'));
+  }
+  const note = st => ({ on: '켜짐 · 잠금 화면에 바로 떠요', off: '이 휴대폰 잠금 화면에 바로 떠요', home: '사파리에서는 안 돼요 · 홈 화면에 추가한 앱에서 켜 주세요',
+    no: '이 휴대폰은 지원하지 않아요 (아이폰은 iOS 16.4 이상)', denied: '꺼져 있어요 · 아이폰 설정 → 알림에서 허용해 주세요' })[st] || '확인하는 중…';
+  return { check, on, off, test, note, get state() { return state; } };
+})();
 let api = async (action, payload = {}) => {
   if (S.demo) return demoApi(action, payload);
   const body = { action, token: S.conn.token, ...payload };
@@ -979,6 +1019,7 @@ function renderSet() {
     <div class="card"><h2>알림 받을 곳</h2>
       <div class="line"><div class="lb">이 앱<small>알림 탭과 빨간 숫자로 보여 줘요</small></div><span class="tag t-go">항상</span></div>
       <div class="line"><div class="lb">Gmail<small>${esc(s.email || '구글 계정 메일')}로 보내요. Gmail 앱 알림을 켜 두면 바로 울려요</small></div>${sw('mail', s.mail)}</div>
+      <div class="line"><div class="lb">이 휴대폰<small>${esc(Push.note(Push.state))}</small></div>${Push.state === 'on' || Push.state === 'off' ? `<button class="btn sm ${Push.state === 'on' ? 'ghost' : ''}" data-act="push" type="button">${Push.state === 'on' ? '끄기' : '켜기'}</button>` : ''}</div>
       <div class="line"><div class="lb">텔레그램<small>${s.tgReady ? '<span class="ok">연결됨</span>' : '봇 연결이 필요해요 (README 안내)'}</small></div>${sw('telegram', s.telegram)}</div>
       <div class="line"><div class="lb">아이폰 위젯<small>홈 화면·잠금 화면에서 최근 개찰결과를 봐요</small></div><a class="btn sm ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="widget.html">설치 안내</a></div></div>
     <div class="card"><h2>알림 받는 개찰결과</h2><p class="sub" style="margin:0">★ 감시 공고 · 우리 회사(${esc((s.myCompanies || []).join(', ') || '-')}) 참여 · 동종업체(${esc((s.rivals || []).length)}곳) 참여. 업체는 감시 탭에서 바꿔요.</p></div>
@@ -1323,8 +1364,16 @@ document.addEventListener('click', async e => {
   if (a === 'debar') return doDebar();
   if (a === 'test') {
     const d = await mutate('test', {}); if (!d) return;
-    const t = d.sent || {}, ok = [t.mail && 'Gmail', t.tg && '텔레그램'].filter(Boolean);
+    const t = d.sent || {}, ok = [t.push && '휴대폰', t.mail && 'Gmail', t.tg && '텔레그램'].filter(Boolean);
     return AppKit.toast(ok.length ? ok.join('·') + '으로 시험 알림을 보냈어요' + (t.tgErr ? ' (텔레그램은 실패: ' + t.tgErr + ')' : '') : '보내지 못했어요: ' + (t.tgErr || '알림 받을 곳이 꺼져 있어요'), 4000);
+  }
+  if (a === 'push') {
+    if (S.demo) return AppKit.toast('서버를 연결한 뒤 켤 수 있어요');
+    try {
+      if (Push.state === 'on') { await Push.off(api); AppKit.toast('이 휴대폰 알림을 껐어요'); }
+      else { await Push.on(api, { api: S.conn.url, extra: { token: S.conn.token } }); AppKit.toast('이 휴대폰 알림을 켰어요 · 시험 알림으로 확인해 보세요'); }
+    } catch (err) { AppKit.toast(err.message || '처리하지 못했어요', 4000); }
+    return redrawKeep();
   }
   if (a === 'checkNow') { const d = await mutate('checkNow', {}); if (d) AppKit.toast('확인했어요 · 새 결과 ' + (d.newCount || 0) + '건'); return; }
   if (a === 'conn') {
@@ -1347,6 +1396,7 @@ AppKit.poll(refresh, 60000, () => sheet.isOpen || AppKit.editing());
 if (S.d) { setData(S.d); AppKit.bootDone(); }
 refresh().finally(AppKit.bootDone);
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+Push.check().then(() => { if (tabs.current === 'set') redrawKeep(); });
 </script>
 </body>
 </html>

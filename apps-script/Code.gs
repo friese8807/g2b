@@ -63,6 +63,7 @@ function handle_(req) {
     const tok = P.getProperty('APP_TOKEN');
     if (!tok || req.token !== tok) return { ok: false, code: 'auth', message: '연결 암호가 맞지 않아요. 설정에서 다시 연결해 주세요' };
     const a = req.action;
+    const pr = pushRoute_(req, 'me', ''); if (pr) return ok_(pr);
     if (a === 'load') return ok_(snapshot_());
     if (a === 'rivalLoad') { try { rivalInstall_(); } catch (e) {} return ok_(rivalLoad_()); }
     if (a === 'rivalSettings') { rivalSettings_(req); return ok_(rivalLoad_()); }
@@ -680,6 +681,14 @@ function notify_(r, s) {
     sent.tg = tg_(subject + '\n\n' + lines.join('\n') + (r.bidders.length ? '\n\n' + r.bidders.slice(0, 5).map(b =>
       (b.rank || '-') + '. ' + b.name + ' ' + rate_(b.rate) + (b.mine ? ' ◀ 우리' : b.rival ? ' ◀ 동종' : '')).join('\n') : '') + '\n\n' + APP_URL);
     if (!sent.tg) sent.tgErr = P.getProperty('TG_TOKEN') ? '봇에게 먼저 말을 걸고 testTelegram 을 실행해 보세요' : 'TG_TOKEN 이 없어요';
+  }
+  if (pushCount_()) {   // 휴대폰 알림: 켜 둔 휴대폰 모두에
+    const res = pushTo_(() => true, ('[' + r.status + '] ' + r.name).slice(0, 60),
+      [r.top ? '1순위 ' + r.top.name + ' (' + rate_(r.top.rate) + ')' : '', r.mine ? '우리 ' + (r.mine.rank || '-') + '위' : '',
+       !r.mine && (r.rivals || []).length ? '동종 ' + r.rivals[0].name.replace(/\(주\)|주식회사/g, '').trim() + ' ' + (r.rivals[0].rank || '-') + '위' : '',
+       '참가 ' + r.prtcpt + '개사'].filter(Boolean).join(' · '));
+    sent.push = res.some(x => /^20[01]/.test(x));
+    if (!sent.push) sent.pushErr = res[0] || '';
   }
   return sent;
 }
@@ -1351,4 +1360,106 @@ function rivalLink() {
   rivalSheet_(); rivalInstall_();
   const url = ScriptApp.getService().getUrl();
   console.log(RIVAL_APP_URL + '#setup=' + encodeURIComponent(Utilities.base64Encode(JSON.stringify({ url: url, token: P.getProperty('APP_TOKEN') }), Utilities.Charset.UTF_8)));
+}
+
+const PUSH_SUB_URL = APP_URL;
+// ════════════════════════ 휴대폰 푸시 알림 ════════════════════════
+// friese-mobile-webapp-kit · web-push. 내용 없는 푸시를 VAPID 서명으로 보내고, 휴대폰(sw.js)이 pushMsg 로 문구를 받아 띄운다.
+// 구독 목록·열쇠는 스크립트 속성(PUSH_SUBS·VAPID_*). 처음 한 번 편집기에서 allowPush() 실행 → 외부 연결 권한 허용.
+// route: pushKey · pushMsg · pushSub · pushOff · pushTest (아래 pushRoute_ 한 줄로 연결)
+
+/** 편집기에서 한 번 실행: '외부 서비스 연결' 권한 허용 창을 띄운다 */
+function allowPush() {
+  UrlFetchApp.fetch('https://web.push.apple.com/', { muteHttpExceptions: true });
+  Logger.log('알림 권한이 허용돼 있어요. 이제 앱에서 휴대폰 알림을 켜 보세요.');
+}
+/** route 에서: const pr = pushRoute_(req, who, name); if (pr) return pr; — 푸시 요청이 아니면 null */
+function pushRoute_(req, who, name) {
+  const a = req.action, ep = String(req.endpoint || '');
+  if (a === 'pushKey') return { key: vapid_().pub };
+  if (a === 'pushMsg') return { msg: popMsg_(ep) };
+  if (a === 'pushSub') { pushSub_(ep, who, name); return { on: true }; }
+  if (a === 'pushOff') { pushOff_(ep); return { on: false }; }
+  if (a === 'pushTest') return { res: pushTo_(function (x) { return x.endpoint === ep; }, '알림이 잘 와요 🔔', (name ? name + ' ' : '') + '휴대폰에 알림이 켜져 있어요') };
+  return null;
+}
+function pushList_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('PUSH_SUBS') || '[]'); } catch (e) { return []; } }
+function pushSave_(l) { PropertiesService.getScriptProperties().setProperty('PUSH_SUBS', JSON.stringify(l.slice(-30))); }
+function pushSub_(ep, who, name) {
+  if (!/^https:\/\/[^\s]{10,900}$/.test(ep)) throw new Error('알림 주소가 올바르지 않아요');
+  const l = pushList_().filter(function (x) { return x.endpoint !== ep; });
+  l.push({ endpoint: ep, who: String(who || ''), name: String(name || '').slice(0, 20), at: Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm') });
+  pushSave_(l);
+}
+function pushOff_(ep) { pushSave_(pushList_().filter(function (x) { return x.endpoint !== ep; })); }
+function pushCount_() { return pushList_().length; }
+function msgKey_(ep) { return 'pm_' + pBig_(pSha_(String(ep))).toString(16); }
+function popMsg_(ep) {
+  const c = CacheService.getScriptCache(), k = msgKey_(ep); let list = [];
+  try { list = JSON.parse(c.get(k) || '[]'); } catch (e) { list = []; }
+  const m = list.shift() || null; c.put(k, JSON.stringify(list), 21600);
+  return m;
+}
+/** 조건에 맞는 휴대폰마다 문구를 맡기고 내용 없는 푸시를 보낸다. 결과 문자열 배열. 오류는 삼킨다(본래 동작을 막지 않게). */
+function pushTo_(match, title, body) {
+  const out = [];
+  try {
+    const all = pushList_(), targets = all.filter(match); if (!targets.length) return out;
+    const v = vapid_(), c = CacheService.getScriptCache(), gone = {};
+    targets.forEach(function (t) {
+      const k = msgKey_(t.endpoint); let list = [];
+      try { list = JSON.parse(c.get(k) || '[]'); } catch (e) {}
+      list.push({ title: String(title).slice(0, 80), body: String(body).slice(0, 300) }); c.put(k, JSON.stringify(list.slice(-5)), 21600);
+      const res = UrlFetchApp.fetch(t.endpoint, { method: 'post', payload: '', muteHttpExceptions: true,
+        headers: { TTL: '86400', Urgency: 'high', Authorization: 'vapid t=' + jwt_(v, t.endpoint.match(/^https:\/\/[^\/]+/)[0]) + ', k=' + v.pub } });
+      const code = res.getResponseCode(), txt = code + ' ' + String(res.getContentText() || '').slice(0, 120);
+      out.push(txt); t.last = Utilities.formatDate(new Date(), 'Asia/Seoul', 'MM-dd HH:mm') + ' ' + txt;
+      if (code === 404 || code === 410) gone[t.endpoint] = 1;
+    });
+    pushSave_(all.filter(function (x) { return !gone[x.endpoint]; }));
+  } catch (e) { out.push('오류 ' + e); }
+  return out;
+}
+// ---- VAPID (ES256, P-256) — Apps Script V8 의 BigInt 로 직접 서명 ----
+function pB64u_(x) { return (typeof x === 'string' ? Utilities.base64EncodeWebSafe(x, Utilities.Charset.UTF_8) : Utilities.base64EncodeWebSafe(x)).replace(/=+$/, ''); }
+function pSha_(x) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, x); }
+function pBig_(bytes) { var h = '0x0'; bytes.forEach(function (b) { h += ('0' + ((b + 256) % 256).toString(16)).slice(-2); }); return BigInt(h); }
+function pBytes_(x, n) { var h = x.toString(16); while (h.length < n * 2) h = '0' + h; var o = []; for (var i = 0; i < n; i++) { var v = parseInt(h.substr(i * 2, 2), 16); o.push(v > 127 ? v - 256 : v); } return o; }
+var P256_ = null;
+function p256_() {
+  if (!P256_) P256_ = { p: BigInt('0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff'), n: BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551'),
+    G: [BigInt('0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296'), BigInt('0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5')] };
+  return P256_;
+}
+function pMod_(a, m) { a = a % m; return a < BigInt(0) ? a + m : a; }
+function pInv_(a, m) { var t = BigInt(0), nt = BigInt(1), r = m, nr = pMod_(a, m), q, x; while (nr !== BigInt(0)) { q = r / nr; x = t - q * nt; t = nt; nt = x; x = r - q * nr; r = nr; nr = x; } return pMod_(t, m); }
+function pAdd_(P, Q) {
+  if (!P) return Q; if (!Q) return P;
+  var p = p256_().p, l;
+  if (P[0] === Q[0]) { if (pMod_(P[1] + Q[1], p) === BigInt(0)) return null; l = pMod_(BigInt(3) * P[0] * P[0] - BigInt(3), p) * pInv_(BigInt(2) * P[1], p) % p; }
+  else l = pMod_(Q[1] - P[1], p) * pInv_(Q[0] - P[0], p) % p;
+  var x = pMod_(l * l - P[0] - Q[0], p);
+  return [x, pMod_(l * (P[0] - x) - P[1], p)];
+}
+function pMul_(k, P) { var R = null; while (k > BigInt(0)) { if (k % BigInt(2) === BigInt(1)) R = pAdd_(R, P); P = pAdd_(P, P); k = k / BigInt(2); } return R; }
+function pRnd_(extra) { return pBig_(pSha_(Utilities.getUuid() + Utilities.getUuid() + Utilities.getUuid() + String(extra || '') + Date.now())); }
+function vapid_() {
+  const P_ = PropertiesService.getScriptProperties();
+  var d = P_.getProperty('VAPID_D'), pub = P_.getProperty('VAPID_PUB');
+  if (!d || !pub) {
+    var n = p256_().n, D = pMod_(pRnd_(), n - BigInt(1)) + BigInt(1), Q = pMul_(D, p256_().G);
+    d = D.toString(16); pub = pB64u_([4].concat(pBytes_(Q[0], 32), pBytes_(Q[1], 32)));
+    P_.setProperties({ VAPID_D: d, VAPID_PUB: pub });
+  }
+  return { d: BigInt('0x' + d), pub: pub };
+}
+function jwt_(v, aud) {
+  var msg = pB64u_(JSON.stringify({ typ: 'JWT', alg: 'ES256' })) + '.' + pB64u_(JSON.stringify({ aud: aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: PUSH_SUB_URL }));
+  var c = p256_(), e = pBig_(pSha_(msg)), r = BigInt(0), s = BigInt(0);
+  while (r === BigInt(0) || s === BigInt(0)) {
+    var k = pMod_(pRnd_(v.d.toString(16) + msg), c.n - BigInt(1)) + BigInt(1);
+    r = pMod_(pMul_(k, c.G)[0], c.n);
+    s = pMod_(pInv_(k, c.n) * (e + r * v.d), c.n);
+  }
+  return msg + '.' + pB64u_(pBytes_(r, 32).concat(pBytes_(s, 32)));
 }
